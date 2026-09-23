@@ -3,6 +3,8 @@ import { angleTo, clamp, distance, random, TAU } from '../core/math.js';
 import { createGameState, randomSpawnPosition, resizeState } from '../core/state.js';
 import { loadBestScore, saveBestScore } from '../core/storage.js';
 import { AudioManager } from '../core/audio.js';
+import { loadProfile, saveProfile, rewardLevel, buyShipUpgrade, buyCompanion, toggleCompanion, upgradeCompanion } from '../core/profile.js';
+import { COMPANION_MODELS, MAX_RUN_LEVEL } from '../data/hangar.js';
 
 const ENEMY_TYPES = {
   grunt: { radius: 13, hp: 28, speed: 75, damage: 13, value: 2, color: '#fb6384' },
@@ -25,7 +27,7 @@ const MINI_BOSS_VARIANTS = [
   { id: 'bomber', name: 'DETONADOR', color: '#e779ff' },
 ];
 
-const RUN_RULES = { bossesToWin: 3, waveLength: 24, waveDeadline: 35, waveBreak: 2.4, enemyCap: 78 };
+const RUN_RULES = { bossesToWin: 4, waveLength: 24, waveDeadline: 35, waveBreak: 2.4, enemyCap: 78 };
 
 export class Game {
   constructor({ renderer, input, ui }) {
@@ -35,9 +37,12 @@ export class Game {
     this.audio = new AudioManager();
     this.state = null;
     this.bestScore = loadBestScore();
+    this.profile = loadProfile();
     this.lastTime = performance.now();
     this.now = 0;
     this.ui.onStart = () => this.start();
+    this.ui.onOpenHangar = () => this.openHangar();
+    this.ui.showMenu(this.profile);
     this.input.onDash = () => this.dash();
     this.input.onChargedShot = () => this.chargedShot();
     this.input.onPointerMove = pointer => {
@@ -51,9 +56,48 @@ export class Game {
 
   start() {
     this.state = createGameState(this.renderer.width, this.renderer.height);
+    this.profile.runs += 1;
+    this.profile = saveProfile(this.profile);
+    const upgrades = this.profile.shipUpgrades;
+    this.state.player.maxHp += upgrades.hull * 15;
+    this.state.player.hp = this.state.player.maxHp;
+    this.state.player.damage *= 1 + upgrades.cannon * .08;
+    this.state.player.move *= 1 + upgrades.engine * .05;
+    this.state.player.rate *= .95 ** upgrades.cadence;
+    for (const id of this.profile.equippedCompanions) {
+      const model = COMPANION_MODELS.find(item => item.id === id);
+      if (model) this.addCompanion(model, this.profile.companionLevels[id]);
+    }
     this.ui.showPlaying();
     this.lastTime = performance.now();
     this.audio.play(650, .25, 'sawtooth', .06);
+  }
+
+  openHangar() {
+    this.state = null;
+    this.ui.showHangar(this.profile, {
+      buyUpgrade: key => this.updateProfile(buyShipUpgrade(this.profile, key)),
+      buyCompanion: id => this.updateProfile(buyCompanion(this.profile, id)),
+      upgradeCompanion: id => this.updateProfile(upgradeCompanion(this.profile, id)),
+      toggleCompanion: id => this.updateProfile(toggleCompanion(this.profile, id)),
+    });
+  }
+
+  updateProfile(result) {
+    if (result.ok) this.profile = saveProfile(result.profile);
+    this.ui.showHangar(this.profile, {
+      buyUpgrade: key => this.updateProfile(buyShipUpgrade(this.profile, key)),
+      buyCompanion: id => this.updateProfile(buyCompanion(this.profile, id)),
+      upgradeCompanion: id => this.updateProfile(upgradeCompanion(this.profile, id)),
+      toggleCompanion: id => this.updateProfile(toggleCompanion(this.profile, id)),
+    });
+  }
+
+  addCompanion(model = {}, level = 1) {
+    const state = this.state;
+    const player = state.player;
+    const phase = state.time * 1.25 + state.companions.length * TAU / Math.max(1, state.companions.length + 1);
+    state.companions.push({ id: state.companionSequence++, modelId: model.id ?? 'reserve', name: model.name ?? 'Companheiro reserva', icon: model.icon ?? '🛸', color: model.color ?? '#a6fff1', damageMultiplier: model.damageMultiplier ?? 1, cadenceMultiplier: model.cadenceMultiplier ?? 1, flightSpeed: model.flightSpeed ?? 1, interceptLevel: model.interceptLevel ?? 3, level, x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
   }
 
   loop(time) {
@@ -84,7 +128,7 @@ export class Game {
     state.shake = Math.max(0, state.shake - 28 * delta); state.flash = Math.max(0, state.flash - delta);
     if (state.waveClock >= RUN_RULES.waveLength && (entities.enemies.length < Math.max(3, state.wave * 2) || state.waveClock >= RUN_RULES.waveDeadline)) this.nextWave();
     if (state.pendingBossRewards > 0 && state.mode === 'playing') this.openBossReward();
-    if (state.xp >= state.nextXp && state.mode === 'playing') this.levelUp();
+    if (state.level < MAX_RUN_LEVEL && state.xp >= state.nextXp && state.mode === 'playing') this.levelUp();
   }
 
   updateWorldHazards(delta) {
@@ -122,7 +166,7 @@ export class Game {
     const state = this.state; const { player, entities } = state;
     state.shieldCooldown = Math.max(0, state.shieldCooldown - delta); state.shieldTime = Math.max(0, state.shieldTime - delta); state.chargeTimer = Math.max(0, state.chargeTimer - delta);
     if (state.powers.shield && state.shieldTime <= 0 && state.shieldCooldown <= 0) { state.shieldTime = 2.4 + .8 * state.powers.shield; state.shieldCooldown = Math.max(7, 16 - 2 * state.powers.shield); this.burst(player.x, player.y, '#81ffca', 18, .7); }
-    if (state.powers.companion) this.updateCompanions(delta);
+    if (state.companions.length) this.updateCompanions(delta);
     if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ x: player.x, y: player.y, maxRadius: radius, life: .65, duration: .65, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
     if (state.powers.singularity) {
       state.singularityTimer -= delta;
@@ -174,15 +218,15 @@ export class Game {
       const orbitRadius = 52 + index % 2 * 12;
       const homeX = player.x + Math.cos(companion.phase) * orbitRadius;
       const homeY = player.y + Math.sin(companion.phase) * orbitRadius;
-      const intercept = companion.level >= 3 && companion.disabledTimer <= 0 ? this.findProjectileIntercept(companion) : null;
+      const intercept = companion.level >= companion.interceptLevel && companion.disabledTimer <= 0 ? this.findProjectileIntercept(companion) : null;
       companion.intercepting = Boolean(intercept);
       const targetX = intercept?.x ?? homeX;
       const targetY = intercept?.y ?? homeY;
-      this.moveCompanionToward(companion, targetX, targetY, intercept ? 540 : 390, delta);
+      this.moveCompanionToward(companion, targetX, targetY, (intercept ? 540 : 390) * companion.flightSpeed, delta);
       companion.angle = Math.atan2(targetY - companion.y, targetX - companion.x);
       if (companion.disabledTimer <= 0 && entities.enemies.length && companion.shootTimer <= 0) {
         this.companionShoot(companion);
-        companion.shootTimer = Math.max(.24, .82 * Math.pow(.86, companion.level - 1));
+        companion.shootTimer = Math.max(.24, .82 * Math.pow(.86, companion.level - 1) / companion.cadenceMultiplier);
       }
     }
   }
@@ -205,7 +249,7 @@ export class Game {
       const safeDistance = player.radius + bullet.radius + 10;
       const x = bullet.x + ux * Math.max(0, along - safeDistance);
       const y = bullet.y + uy * Math.max(0, along - safeDistance);
-      const timeToIntercept = distance(companion, { x, y }) / 540;
+      const timeToIntercept = distance(companion, { x, y }) / (540 * companion.flightSpeed);
       const timeToImpact = along / speed;
       if (timeToIntercept > timeToImpact + .04) continue;
       if (!best || timeToImpact < best.timeToImpact) best = { x, y, timeToImpact };
@@ -284,10 +328,10 @@ export class Game {
 
   threatLevel() {
     const state = this.state;
-    return Math.min(2.4, Math.max(0, state.wave - 1) * .075 + Math.max(0, state.level - 1) * .045 + this.powerCount() * .14);
+    return Math.min(2.4, Math.max(0, state.wave - 1) * .075 + Math.max(0, state.level - 1) * .045 + this.powerCount() * .14 + state.companions.length * .08);
   }
 
-  powerCount() { return Object.values(this.state.powers).reduce((total, count) => total + count, 0); }
+  powerCount() { return Object.values(this.state.powers).reduce((total, count) => total + count, 0) + this.state.companions.length * .35; }
 
   nearestEnemy(origin = this.state.player) {
     return this.state.entities.enemies.reduce((nearest, enemy) => !nearest || distance(origin, enemy) < distance(origin, nearest) ? enemy : nearest, null);
@@ -318,7 +362,7 @@ export class Game {
     const angle = angleTo(origin, target);
     const level = companion.level;
     const speed = 570 + Math.min(level - 1, 5) * 22;
-    const damage = player.damage * Math.min(.9, .42 + (level - 1) * .09);
+    const damage = player.damage * Math.min(.9, .42 + (level - 1) * .09) * companion.damageMultiplier;
     state.entities.bullets.push({ x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1.2, radius: 4, damage, pierce: 0, hit: new Set(), critical: false, slow: player.slow, companionShot: true });
   }
 
@@ -476,7 +520,7 @@ export class Game {
       bullet.x += bullet.vx * delta;
       bullet.y += bullet.vy * delta;
       bullet.life -= delta;
-      const interceptor = state.companions.find(companion => companion.level >= 3 && companion.disabledTimer <= 0 && distance(bullet, companion) < 9 + bullet.radius);
+      const interceptor = state.companions.find(companion => companion.level >= companion.interceptLevel && companion.disabledTimer <= 0 && distance(bullet, companion) < 9 + bullet.radius);
       if (interceptor) {
         interceptor.disabledTimer = 2;
         interceptor.hitFlash = .3;
@@ -491,7 +535,7 @@ export class Game {
     }
   }
 
-  collectGems(delta) { const state = this.state; const { player, gems } = state.entities ? { player: state.player, gems: state.entities.gems } : {}; for (let index = gems.length - 1; index >= 0; index -= 1) { const gem = gems[index]; const currentDistance = distance(gem, player); if (currentDistance < player.magnet) { const angle = angleTo(gem, player); const speed = (player.magnet - currentDistance) * 5 + 100; gem.x += Math.cos(angle) * speed * delta; gem.y += Math.sin(angle) * speed * delta; } if (currentDistance < 20) { state.xp += gem.value; gems.splice(index, 1); this.audio.play(650 + state.xp * 4, .045, 'sine', .008); } } }
+  collectGems(delta) { const state = this.state; const { player, gems } = state.entities ? { player: state.player, gems: state.entities.gems } : {}; for (let index = gems.length - 1; index >= 0; index -= 1) { const gem = gems[index]; const currentDistance = distance(gem, player); if (currentDistance < player.magnet) { const angle = angleTo(gem, player); const speed = (player.magnet - currentDistance) * 5 + 100; gem.x += Math.cos(angle) * speed * delta; gem.y += Math.sin(angle) * speed * delta; } if (currentDistance < 20) { if (state.level < MAX_RUN_LEVEL) state.xp += gem.value; else state.score += gem.value * 2; gems.splice(index, 1); this.audio.play(650 + state.xp * 4, .045, 'sine', .008); } } }
 
   updateParticles(delta) { const { particles, floaters } = this.state.entities; for (let index = particles.length - 1; index >= 0; index -= 1) { const particle = particles[index]; particle.x += particle.vx * delta; particle.y += particle.vy * delta; particle.vx *= .975; particle.vy *= .975; particle.life -= delta; if (particle.life <= 0) particles.splice(index, 1); } for (let index = floaters.length - 1; index >= 0; index -= 1) { const floater = floaters[index]; floater.y -= 25 * delta; floater.life -= delta; if (floater.life <= 0) floaters.splice(index, 1); } }
 
@@ -499,8 +543,12 @@ export class Game {
 
   levelUp() {
     const state = this.state;
+    if (state.level >= MAX_RUN_LEVEL) return;
     state.xp -= state.nextXp;
     state.level += 1;
+    const reward = rewardLevel(this.profile, state.level);
+    this.profile = saveProfile(reward.profile);
+    state.creditsEarned += reward.credits;
     const hpRestored = Math.min(Math.ceil(state.player.maxHp * .5), state.player.maxHp - state.player.hp);
     state.player.hp += hpRestored;
     state.nextXp = Math.ceil(state.nextXp * 1.28 + 4);
@@ -513,9 +561,14 @@ export class Game {
     }
     this.label(state.player.x, state.player.y - 40, `REPARO 50% DO CASCO · +${hpRestored} VIDA`, '#80ffc2');
     this.label(this.renderer.width / 2, this.renderer.height * .32, `⚠ HORDA DO NÍVEL ${state.level}`, '#ffba74');
+    if (reward.credits) this.label(this.renderer.width / 2, this.renderer.height * .37, `+${reward.credits} CRÉDITOS`, '#ffe687');
+    for (const skill of reward.unlocked) this.label(this.renderer.width / 2, this.renderer.height * .42, `HABILIDADE DESBLOQUEADA · ${skill.name}`, '#8df4ff');
     state.mode = 'choice';
     const choices = pickChoices(UPGRADES, 3);
-    if (Math.random() < .28) choices[Math.floor(Math.random() * choices.length)] = POWERS[Math.floor(Math.random() * POWERS.length)];
+    const unlockedPowers = POWERS.filter(power => this.profile.unlockedSkills.includes(power.key));
+    const newlyUnlockedPower = reward.unlocked.map(skill => unlockedPowers.find(power => power.key === skill.key)).find(Boolean);
+    if (newlyUnlockedPower) choices[choices.length - 1] = newlyUnlockedPower;
+    else if (unlockedPowers.length && Math.random() < .28) choices[Math.floor(Math.random() * choices.length)] = unlockedPowers[Math.floor(Math.random() * unlockedPowers.length)];
     this.ui.showUpgrade(state, choices, choice => this.applyChoice(choice));
   }
 
@@ -553,10 +606,7 @@ export class Game {
       const target = state.companions.find(companion => companion.id === power.targetId);
       if (target) {
         target.level += 1;
-      } else if (power.addNew || !state.companions.length) {
-        const phase = state.time * 1.25 + state.companions.length * TAU / Math.max(1, state.companions.length + 1);
-        state.companions.push({ id: state.companionSequence++, level: 1, x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
-      }
+      } else if (power.addNew || !state.companions.length) this.addCompanion();
     }
     if (power.key === 'shield') {
       player.rate = Math.min(1.35, player.rate * 1.1);
@@ -595,7 +645,7 @@ export class Game {
         state.pendingBossRewards -= 1;
         if (selected.key === 'nova') state.novaTimer = 2;
         if (state.pendingBossRewards > 0) this.openBossReward();
-        else if (state.finalBossDefeated) this.finishRun('victory');
+        else if (state.finalBossDefeated) { state.stageCompleted = true; this.label(this.renderer.width / 2, this.renderer.height * .3, 'ETAPA 1 CONCLUÍDA · SOBREVIVA ATÉ CAIR', '#ffe687'); state.mode = 'playing'; this.ui.showPlaying(); }
         else if (state.xp >= state.nextXp) this.levelUp();
         else { state.mode = 'playing'; this.ui.showPlaying(); }
       };
@@ -621,7 +671,7 @@ export class Game {
 
   hurt(amount) { const state = this.state; const { player } = state; if (player.invulnerable > 0 || player.dashTime > 0 || state.shieldTime > 0) return; const damage = Math.max(1, amount * (1 - player.armor)); player.hp -= damage; player.invulnerable = .55; state.shake = 11; state.flash = .22; this.burst(player.x, player.y, '#ff587e', 15); this.label(player.x, player.y - 25, `-${Math.round(damage)}`, '#ff8098'); this.audio.play(180, .16, 'sawtooth', .065); if (player.hp <= 0) this.gameOver(); }
 
-  gameOver() { this.finishRun('defeat'); }
+  gameOver() { this.finishRun(this.state.stageCompleted ? 'stage-complete' : 'defeat'); }
 
   finishRun(outcome) {
     const state = this.state;

@@ -20,15 +20,31 @@
         <div class="panel panel--hero">
           <span class="eyebrow">um pequeno universo em expansão</span>
           <h1 id="menu-title">NEON<br />RIFT</h1>
-          <p>Monte sua build, fortaleça seu esquadrão e derrote três Guardiões para selar o Núcleo do Rift.</p>
+          <p>Sobreviva, reúna créditos e prepare sua nave no hangar. Alcance o nível 20 para concluir a primeira etapa — depois, tente sobreviver o máximo possível.</p>
+          <div class="meta-strip" id="menu-meta"></div>
           <div class="key-list">
             <span><kbd>W A S D</kbd> mover</span>
             <span><kbd>Mouse</kbd> mirar</span>
             <span><kbd>Espaço</kbd> impulso</span>
             <span><kbd>P</kbd> pausa</span>
           </div>
-          <button class="primary-button" id="play-button" type="button">ENTRAR NA ARENA <span>→</span></button>
+          <div class="menu-actions"><button class="secondary-button" id="hangar-button" type="button">ABRIR HANGAR</button><button class="primary-button" id="play-button" type="button">ENTRAR NA ARENA <span>→</span></button></div>
           <p class="hint">Mire com o mouse; os tiros saem automaticamente. Clique esquerdo dispara um tiro carregado quando disponível.</p>
+        </div>
+      </section>
+
+      <section class="screen screen--choice is-hidden" id="hangar-screen" aria-labelledby="hangar-title">
+        <div class="panel panel--hangar">
+          <span class="eyebrow">preparação entre expedições</span>
+          <h2 id="hangar-title">Hangar da Frota</h2>
+          <div class="meta-strip" id="hangar-meta"></div>
+          <h3>Melhorias permanentes da nave</h3>
+          <div class="hangar-grid" id="ship-upgrades"></div>
+          <h3>Companheiros · equipe até 2</h3>
+          <div class="hangar-grid" id="companion-shop"></div>
+          <h3>Habilidades desbloqueadas por nível</h3>
+          <div class="skill-list" id="skill-unlocks"></div>
+          <div class="menu-actions"><button class="secondary-button" id="hangar-back" type="button">VOLTAR</button><button class="primary-button" id="hangar-start" type="button">INICIAR EXPEDIÇÃO <span>→</span></button></div>
         </div>
       </section>
 
@@ -46,7 +62,7 @@
           <span class="eyebrow" id="end-eyebrow">transmissão encerrada</span>
           <h2 id="end-title">A arena venceu desta vez</h2>
           <p id="end-stats"></p>
-          <button class="primary-button" id="again-button" type="button">TENTAR NOVAMENTE <span>→</span></button>
+          <div class="menu-actions"><button class="secondary-button" id="end-hangar-button" type="button">HANGAR</button><button class="primary-button" id="again-button" type="button">TENTAR NOVAMENTE <span>→</span></button></div>
         </div>
       </section>
     </main>

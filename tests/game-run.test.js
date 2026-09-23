@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createGameState } from '../src/core/state.js';
 import { Game } from '../src/game/Game.js';
+import { buyCompanion, buyShipUpgrade, createDefaultProfile, rewardLevel, toggleCompanion, upgradeCompanion } from '../src/core/profile.js';
 
 function createHarness() {
   const game = Object.create(Game.prototype);
   game.state = createGameState(1024, 768);
+  game.profile = createDefaultProfile();
   game.renderer = { width: 1024, height: 768 };
   game.input = { pointer: { active: false, x: 0, y: 0 } };
   game.audio = { play() {} };
@@ -39,10 +41,11 @@ test('companion upgrades affect only the selected drone', () => {
   assert.deepEqual(game.state.companions.map(companion => companion.level), [2, 1]);
 });
 
-test('defeating the third Guardian and claiming its reward completes the run', () => {
+test('defeating the fourth Guardian completes stage one but keeps the run alive', () => {
   const game = createHarness();
   game.spawn = Game.prototype.spawn.bind(game);
-  game.state.bossSequence = 2;
+  game.state.level = 20;
+  game.state.bossSequence = 3;
   game.spawnBoss();
   const finalBoss = game.state.entities.enemies.at(-1);
   assert.equal(finalBoss.isFinalBoss, true);
@@ -50,8 +53,45 @@ test('defeating the third Guardian and claiming its reward completes the run', (
   game.killEnemy(finalBoss);
   assert.equal(game.state.finalBossDefeated, true);
   game.openBossReward();
-  assert.equal(game.state.outcome, 'victory');
-  assert.equal(game.state.mode, 'dead');
+  assert.equal(game.state.stageCompleted, true);
+  assert.equal(game.state.outcome, null);
+  assert.equal(game.state.mode, 'playing');
+});
+
+test('career level rewards credits and unlocks the level skill once', () => {
+  const first = rewardLevel(createDefaultProfile(), 2);
+  assert.equal(first.credits, 16);
+  assert.ok(first.profile.unlockedSkills.includes('companion'));
+  const again = rewardLevel(first.profile, 2);
+  assert.deepEqual(again.unlocked, []);
+});
+
+test('hangar purchases and equipment respect currency and the two-companion limit', () => {
+  const funded = { ...createDefaultProfile(), credits: 300 };
+  const hull = buyShipUpgrade(funded, 'hull');
+  assert.equal(hull.profile.shipUpgrades.hull, 1);
+  const scout = buyCompanion(hull.profile, 'scout');
+  const scoutUpgrade = upgradeCompanion(scout.profile, 'scout');
+  assert.equal(scoutUpgrade.profile.companionLevels.scout, 2);
+  assert.equal(scoutUpgrade.profile.companionLevels.striker, 1);
+  const striker = buyCompanion(scoutUpgrade.profile, 'striker');
+  const bulwark = buyCompanion(striker.profile, 'bulwark');
+  assert.equal(bulwark.ok, true);
+  assert.equal(bulwark.profile.equippedCompanions.length, 2);
+  const cannotEquipThird = toggleCompanion(bulwark.profile, 'bulwark');
+  assert.equal(cannotEquipThird.ok, false);
+});
+
+test('hangar ship and companion upgrades are applied when a new run starts', () => {
+  const game = createHarness();
+  const hull = buyShipUpgrade({ ...game.profile, credits: 200 }, 'hull');
+  const scout = buyCompanion(hull.profile, 'scout');
+  game.profile = upgradeCompanion(scout.profile, 'scout').profile;
+  game.start();
+  assert.equal(game.state.player.maxHp, 115);
+  assert.equal(game.state.companions.length, 1);
+  assert.equal(game.state.companions[0].modelId, 'scout');
+  assert.equal(game.state.companions[0].level, 2);
 });
 
 test('wave changes provide a short regroup and reset their timer', () => {

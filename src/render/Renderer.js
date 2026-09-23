@@ -193,9 +193,10 @@ export class Renderer {
       context.strokeStyle = '#8dfff0aa'; context.lineWidth = 1.5; context.setLineDash([]); context.beginPath(); context.ellipse(0, 0, 21, 15, 0, 0, TAU); context.stroke();
     }
     context.shadowBlur = companion.hitFlash > 0 ? 25 : 19;
-    context.shadowColor = companion.hitFlash > 0 ? '#ffae6b' : '#4fffe0';
+    const accent = companion.color ?? '#4fffe0';
+    context.shadowColor = companion.hitFlash > 0 ? '#ffae6b' : accent;
     context.fillStyle = disabled ? '#443b43' : '#103440';
-    context.strokeStyle = companion.hitFlash > 0 ? '#ffc17c' : '#a6fff1';
+    context.strokeStyle = companion.hitFlash > 0 ? '#ffc17c' : accent;
     context.lineWidth = 2;
     context.beginPath();
     context.moveTo(0, -13);
@@ -209,7 +210,7 @@ export class Renderer {
     context.closePath();
     context.fill(); context.stroke();
     context.shadowBlur = 0;
-    context.strokeStyle = disabled ? '#9d7770' : '#46e9d4'; context.lineWidth = 1.1;
+    context.strokeStyle = disabled ? '#9d7770' : accent; context.lineWidth = 1.1;
     context.beginPath(); context.moveTo(-12, 2); context.quadraticCurveTo(-5, -2, 0, 0); context.quadraticCurveTo(5, -2, 12, 2); context.stroke();
     context.fillStyle = disabled ? '#a96c58' : '#ffdc82';
     context.shadowColor = disabled ? '#ff9368' : '#ffdc82'; context.shadowBlur = disabled ? 5 : 12;
@@ -226,7 +227,7 @@ export class Renderer {
     const { player } = state;
     const padding = width < 600 ? 13 : 25;
     const panelWidth = width < 600 ? 224 : 238;
-    const panelHeight = 154;
+    const panelHeight = 165;
     context.fillStyle = '#081426dc';
     context.fillRect(padding, padding, panelWidth, panelHeight);
     context.strokeStyle = '#407590';
@@ -245,7 +246,7 @@ export class Renderer {
     context.fillRect(padding + 11, padding + 47, (panelWidth - 22) * clamp(state.xp / state.nextXp, 0, 1), 6);
     context.fillStyle = '#a8c5d6';
     context.font = '10px system-ui';
-    context.fillText(`CASCO ${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp}  ·  XP ${state.xp}/${state.nextXp}`, padding + 11, padding + 68);
+    context.fillText(state.level >= 20 ? `CASCO ${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp}  ·  NÍVEL MÁXIMO` : `CASCO ${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp}  ·  XP ${state.xp}/${state.nextXp}`, padding + 11, padding + 68);
     context.strokeStyle = '#40759080';
     context.beginPath(); context.moveTo(padding + 11, padding + 77); context.lineTo(padding + panelWidth - 11, padding + 77); context.stroke();
 
@@ -278,18 +279,21 @@ export class Renderer {
     context.font = '11px system-ui';
     context.fillStyle = '#83aec8';
     context.fillText(`RECORDE ${bestScore}`, width - padding, padding + 40);
-    context.fillStyle = state.bossesDefeated >= 2 ? '#ffe783' : '#83aec8';
+    context.fillStyle = state.stageCompleted || state.bossesDefeated >= 3 ? '#ffe783' : '#83aec8';
     context.font = 'bold 11px system-ui';
-    context.fillText(`GUARDIÕES ${state.bossesDefeated}/3`, width - padding, padding + 55);
+    context.fillText(state.stageCompleted ? 'ETAPA 1 CONCLUÍDA · SOBREVIVA' : `GUARDIÕES ${state.bossesDefeated}/4`, width - padding, padding + 55);
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
     context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 75);
     const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩' };
     const squadLevel = Math.max(0, ...state.companions.map(companion => companion.level));
-    const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => key === 'companion' ? `🛸${state.companions.length} · L${squadLevel}` : `${powerIcons[key]}×${value}`).join('  ');
+    const activePowers = [state.companions.length ? `🛸${state.companions.length} · L${squadLevel}` : '', ...Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${powerIcons[key]}×${value}`)].filter(Boolean).join('  ');
     context.fillStyle = '#d5b4ff';
     context.font = '12px system-ui';
     context.fillText(activePowers, width - padding, padding + 95);
+    context.fillStyle = '#ffe783';
+    context.font = 'bold 11px system-ui';
+    context.fillText(`◈ ${state.creditsEarned} CR NESTA RUN`, width - padding, padding + 135);
     if (state.powers.charged) {
       context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb';
       context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 113);

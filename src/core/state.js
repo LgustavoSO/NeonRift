@@ -19,6 +19,8 @@ export function createGameState(width, height) {
     bossSequence: 0,
     bossesDefeated: 0,
     finalBossDefeated: false,
+    stageCompleted: false,
+    creditsEarned: 0,
     outcome: null,
     shake: 0,
     flash: 0,

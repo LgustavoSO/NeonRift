@@ -33,8 +33,10 @@ src/
     math.js               operações geométricas compartilhadas
     state.js              contrato e ciclo de vida do estado
     storage.js            persistência local do recorde
+    profile.js            carreira, créditos, compras e salvamento local versionado
   data/
     upgrades.js           melhorias e poderes como dados configuráveis
+    hangar.js             melhorias permanentes, companheiros e marcos de habilidade
   game/
     Game.js               orquestração do loop e sistemas de jogo
   input/
@@ -52,7 +54,7 @@ src/
 
 - **Canvas 2D + ES Modules + Vite:** mantém o jogo leve, portátil e fácil de publicar em qualquer hospedagem estática. A troca por Phaser ou ECS pode acontecer depois, caso o volume de entidades exija isso.
 - **Estado central explícito:** sistemas não dependem do DOM para saber o que está acontecendo. Isso facilita replay, testes, telemetria e salvar/carregar run no futuro.
-- **Conteúdo orientado a dados:** upgrades e poderes vivem em `src/data/upgrades.js`; novos itens não precisam alterar o renderer.
+- **Conteúdo orientado a dados:** upgrades e poderes vivem em `src/data/upgrades.js`; meta-progressão e itens do hangar vivem em `src/data/hangar.js`.
 - **Entrada desacoplada:** mouse, teclado e touch chegam ao jogo pelo mesmo contrato, mantendo a experiência de navegador e celular alinhada.
 - **Progressive enhancement:** áudio e `localStorage` falham silenciosamente quando o navegador não oferece suporte; o jogo continua jogável.
 
