@@ -86,6 +86,7 @@ export class Renderer {
     for (const bullet of bullets) this.drawBullet(context, bullet);
     for (const bullet of enemyBullets) this.drawEnemyBullet(context, bullet);
     for (const enemy of enemies) this.drawEnemy(context, enemy, now);
+    if (state.powers.aimbot && state.aimTarget && enemies.includes(state.aimTarget)) this.drawTargetLock(context, state.aimTarget, now);
     this.drawPlayer(context, state, now);
     for (const particle of particles) { context.globalAlpha = clamp(particle.life / particle.maxLife, 0, 1); context.fillStyle = particle.color; context.beginPath(); context.arc(particle.x, particle.y, particle.radius, 0, TAU); context.fill(); }
     context.globalAlpha = 1;
@@ -102,6 +103,29 @@ export class Renderer {
   drawRing(context, ring) { context.globalAlpha = ring.life / ring.duration; context.strokeStyle = ring.color; context.lineWidth = 9 * ring.life / ring.duration + 2; context.shadowBlur = 35; context.shadowColor = ring.color; context.beginPath(); context.arc(ring.x, ring.y, ring.maxRadius * (1 - ring.life / ring.duration), 0, TAU); context.stroke(); context.globalAlpha = 1; context.shadowBlur = 0; }
   drawBullet(context, bullet) { context.shadowBlur = 16; context.shadowColor = bullet.charged ? '#ffaf48' : bullet.critical ? '#ffe487' : '#5ff6ff'; context.fillStyle = bullet.charged ? '#ffd06c' : bullet.critical ? '#fff4a5' : '#a0ffff'; context.beginPath(); context.arc(bullet.x, bullet.y, bullet.radius, 0, TAU); context.fill(); context.shadowBlur = 0; }
   drawEnemyBullet(context, bullet) { context.shadowBlur = 17; context.shadowColor = '#ff59b3'; context.fillStyle = '#ff8bd4'; context.beginPath(); context.arc(bullet.x, bullet.y, bullet.radius, 0, TAU); context.fill(); context.shadowBlur = 0; }
+
+  drawTargetLock(context, target, now) {
+    const radius = target.radius + 12 + Math.sin(now * .01) * 1.5;
+    context.save();
+    context.strokeStyle = '#ffd45c';
+    context.lineWidth = 1.8;
+    context.shadowBlur = 14;
+    context.shadowColor = '#ffb52e';
+    context.beginPath();
+    context.arc(target.x, target.y, radius, 0, TAU);
+    context.stroke();
+    for (let index = 0; index < 4; index += 1) {
+      const angle = index * Math.PI / 2 + Math.PI / 4;
+      const x = target.x + Math.cos(angle) * radius;
+      const y = target.y + Math.sin(angle) * radius;
+      context.beginPath();
+      context.moveTo(x - Math.cos(angle) * 5, y - Math.sin(angle) * 5);
+      context.lineTo(x, y);
+      context.lineTo(x - Math.cos(angle) * 5 + Math.cos(angle + Math.PI / 2) * 5, y - Math.sin(angle) * 5 + Math.sin(angle + Math.PI / 2) * 5);
+      context.stroke();
+    }
+    context.restore();
+  }
 
   drawEnemy(context, enemy, now) {
     const isBoss = enemy.type === 'boss';
@@ -178,7 +202,7 @@ export class Renderer {
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
     context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 60);
-    const powerIcons = { companion: '🤖', shield: '🛡', charged: '☄', nova: '🌌' };
+    const powerIcons = { companion: '🤖', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯' };
     const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${powerIcons[key]}×${value}`).join('  ');
     context.fillStyle = '#d5b4ff';
     context.font = '12px system-ui';

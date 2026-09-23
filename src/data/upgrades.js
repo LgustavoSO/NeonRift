@@ -17,6 +17,7 @@ export const POWERS = [
   { icon: '🛡️', name: 'Escudo reativo', description: 'Bloqueia dano automaticamente por alguns segundos; depois recarrega.', tradeoff: 'A recarga do canhão fica 10% mais lenta por nível.', key: 'shield' },
   { icon: '☄️', name: 'Tiro carregado', description: 'A cada poucos segundos, dispara um projétil gigante que atravessa vários inimigos.', key: 'charged' },
   { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'O campo consome 8 pontos de vida máxima por nível.', key: 'nova' },
+  { icon: '🎯', name: 'Mira automática', description: 'Trava no inimigo mais próximo e guia seus projéteis até ele.', tradeoff: 'O sistema de rastreamento reduz a cadência do canhão em 8% por nível.', key: 'aimbot' },
 ];
 
 export function pickChoices(source, count = 3) {

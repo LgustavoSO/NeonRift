@@ -108,7 +108,9 @@ export class Game {
   updatePlayer(delta) {
     const state = this.state; const { player } = state; const movement = this.input.movement();
     if (movement.x || movement.y) { player.x = clamp(player.x + movement.x * player.move * (player.dashTime > 0 ? 3.8 : 1) * delta, player.radius, this.renderer.width - player.radius); player.y = clamp(player.y + movement.y * player.move * (player.dashTime > 0 ? 3.8 : 1) * delta, player.radius, this.renderer.height - player.radius); if (Math.random() < .25) this.burst(player.x - movement.x * 14, player.y - movement.y * 14, '#38b6ff', 1, .2); }
-    if (this.input.pointer.active) player.angle = Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x);
+    state.aimTarget = state.powers.aimbot ? this.nearestEnemy(player) : null;
+    if (state.aimTarget) player.angle = angleTo(player, state.aimTarget);
+    else if (this.input.pointer.active) player.angle = Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x);
     player.invulnerable = Math.max(0, player.invulnerable - delta); player.dash = Math.max(0, player.dash - delta); player.dashTime = Math.max(0, player.dashTime - delta); player.shootTimer -= delta;
     if (player.shootTimer <= 0 && state.entities.enemies.length) { this.shoot(); player.shootTimer = player.rate; }
   }
@@ -179,14 +181,55 @@ export class Game {
 
   powerCount() { return Object.values(this.state.powers).reduce((total, count) => total + count, 0); }
 
+  nearestEnemy(origin = this.state.player) {
+    return this.state.entities.enemies.reduce((nearest, enemy) => !nearest || distance(origin, enemy) < distance(origin, nearest) ? enemy : nearest, null);
+  }
+
   shoot() {
-    const state = this.state; const { player, entities } = state; const target = entities.enemies.reduce((nearest, enemy) => !nearest || distance(player, enemy) < distance(player, nearest) ? enemy : nearest, null); if (!target) return; const center = this.input.pointer.active ? Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x) : angleTo(player, target); player.angle = center; for (let index = 0; index < player.shots; index += 1) { const angle = center + (index - (player.shots - 1) / 2) * .16; entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * 710, vy: Math.sin(angle) * 710, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow }); } this.audio.play(450, .055, 'triangle', .016); this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, '#70f5ff', 3, .35); }
+    const state = this.state;
+    const { player, entities } = state;
+    const target = this.nearestEnemy(player);
+    if (!target) return;
+    const center = state.powers.aimbot ? angleTo(player, target) : this.input.pointer.active ? Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x) : angleTo(player, target);
+    player.angle = center;
+    for (let index = 0; index < player.shots; index += 1) {
+      const angle = center + (index - (player.shots - 1) / 2) * .16;
+      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * 710, vy: Math.sin(angle) * 710, speed: 710, target: state.powers.aimbot ? target : null, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow });
+    }
+    this.audio.play(450, .055, 'triangle', .016);
+    this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, '#70f5ff', 3, .35);
+  }
 
   companionShoot(index) { const state = this.state; const player = state.player; const angle = state.time * 1.6 + index * TAU / Math.min(4, state.powers.companion); const x = player.x + Math.cos(angle) * 44; const y = player.y + Math.sin(angle) * 44; const target = state.entities.enemies.reduce((nearest, enemy) => !nearest || distance({ x, y }, enemy) < distance({ x, y }, nearest) ? enemy : nearest, null); if (!target) return; const shotAngle = angleTo({ x, y }, target); state.entities.bullets.push({ x, y, vx: Math.cos(shotAngle) * 570, vy: Math.sin(shotAngle) * 570, life: 1.2, radius: 4, damage: player.damage * .7, pierce: 0, hit: new Set(), critical: false, slow: player.slow }); }
 
   updateBullets(delta) {
     const state = this.state; const { bullets, enemies } = state.entities;
-    for (let index = bullets.length - 1; index >= 0; index -= 1) { const bullet = bullets[index]; bullet.x += bullet.vx * delta; bullet.y += bullet.vy * delta; bullet.life -= delta; if (bullet.life <= 0 || bullet.x < -40 || bullet.x > this.renderer.width + 40 || bullet.y < -40 || bullet.y > this.renderer.height + 40) { bullets.splice(index, 1); continue; } let remove = false; for (const enemy of enemies) { if (bullet.hit.has(enemy) || distance(bullet, enemy) > enemy.radius + bullet.radius) continue; bullet.hit.add(enemy); const damage = bullet.damage * (bullet.critical ? 3 : 1); enemy.hp -= enemy.adaptive?.shield ? damage * .78 : enemy.adaptive?.armor ? damage * .86 : damage; enemy.slow = Math.max(enemy.slow, bullet.slow * (enemy.adaptive?.resist ? .65 : 1.7)); this.burst(bullet.x, bullet.y, enemy.color, bullet.critical ? 10 : 5, .6); if (bullet.critical) this.label(enemy.x, enemy.y - 23, `✦ ${Math.round(damage)}`, '#fff18c'); if (bullet.pierce-- <= 0) { remove = true; break; } } if (remove) bullets.splice(index, 1); }
+    for (let index = bullets.length - 1; index >= 0; index -= 1) {
+      const bullet = bullets[index];
+      if (state.powers.aimbot && bullet.target) {
+        if (!enemies.includes(bullet.target)) bullet.target = this.nearestEnemy(bullet);
+        if (bullet.target) {
+          const angle = angleTo(bullet, bullet.target);
+          const speed = bullet.speed ?? Math.hypot(bullet.vx, bullet.vy);
+          bullet.vx = Math.cos(angle) * speed;
+          bullet.vy = Math.sin(angle) * speed;
+        }
+      }
+      bullet.x += bullet.vx * delta; bullet.y += bullet.vy * delta; bullet.life -= delta;
+      if (bullet.life <= 0 || bullet.x < -40 || bullet.x > this.renderer.width + 40 || bullet.y < -40 || bullet.y > this.renderer.height + 40) { bullets.splice(index, 1); continue; }
+      let remove = false;
+      for (const enemy of enemies) {
+        if (bullet.hit.has(enemy) || distance(bullet, enemy) > enemy.radius + bullet.radius) continue;
+        bullet.hit.add(enemy);
+        const damage = bullet.damage * (bullet.critical ? 3 : 1);
+        enemy.hp -= enemy.adaptive?.shield ? damage * .78 : enemy.adaptive?.armor ? damage * .86 : damage;
+        enemy.slow = Math.max(enemy.slow, bullet.slow * (enemy.adaptive?.resist ? .65 : 1.7));
+        this.burst(bullet.x, bullet.y, enemy.color, bullet.critical ? 10 : 5, .6);
+        if (bullet.critical) this.label(enemy.x, enemy.y - 23, `✦ ${Math.round(damage)}`, '#fff18c');
+        if (bullet.pierce-- <= 0) { remove = true; break; }
+      }
+      if (remove) bullets.splice(index, 1);
+    }
   }
 
   updateEnemies(delta) {
@@ -358,6 +401,7 @@ export class Game {
       state.shieldCooldown = 0;
     }
     if (power.key === 'charged') state.chargeTimer = 0;
+    if (power.key === 'aimbot') player.rate = Math.min(1.35, player.rate * 1.08);
     if (power.key === 'nova') {
       player.maxHp = Math.max(60, player.maxHp - 8);
       player.hp = Math.min(player.hp, player.maxHp);
@@ -378,7 +422,17 @@ export class Game {
     });
   }
 
-  chargedShot() { const state = this.state; if (!state || state.mode !== 'playing' || !state.powers.charged || state.chargeTimer > 0) return; const { player } = state; const angle = this.input.pointer.active ? Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x) : player.angle; state.entities.bullets.push({ x: player.x + Math.cos(angle) * 20, y: player.y + Math.sin(angle) * 20, vx: Math.cos(angle) * 590, vy: Math.sin(angle) * 590, life: 1.8, radius: 14, damage: player.damage * (3 + state.powers.charged), pierce: 4 + state.powers.charged * 2, hit: new Set(), critical: true, slow: player.slow, charged: true }); state.chargeTimer = Math.max(2.8, 7 - state.powers.charged * .7); this.audio.play(150, .45, 'sawtooth', .1); this.burst(player.x, player.y, '#ffcf67', 26, 1); }
+  chargedShot() {
+    const state = this.state;
+    if (!state || state.mode !== 'playing' || !state.powers.charged || state.chargeTimer > 0) return;
+    const { player } = state;
+    const target = state.powers.aimbot ? this.nearestEnemy(player) : null;
+    const angle = target ? angleTo(player, target) : this.input.pointer.active ? Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x) : player.angle;
+    state.entities.bullets.push({ x: player.x + Math.cos(angle) * 20, y: player.y + Math.sin(angle) * 20, vx: Math.cos(angle) * 590, vy: Math.sin(angle) * 590, speed: 590, target, life: 1.8, radius: 14, damage: player.damage * (3 + state.powers.charged), pierce: 4 + state.powers.charged * 2, hit: new Set(), critical: true, slow: player.slow, charged: true });
+    state.chargeTimer = Math.max(2.8, 7 - state.powers.charged * .7);
+    this.audio.play(150, .45, 'sawtooth', .1);
+    this.burst(player.x, player.y, '#ffcf67', 26, 1);
+  }
 
   dash() { const state = this.state; if (!state || state.mode !== 'playing' || state.player.dash > 0) return; const player = state.player; player.dash = player.dashCooldown; player.dashTime = .38; player.invulnerable = Math.max(player.invulnerable, .42); this.burst(player.x, player.y, '#7ffaff', 22, 1.3); this.audio.play(280, .18, 'sawtooth', .06); }
 
