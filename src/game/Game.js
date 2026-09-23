@@ -119,8 +119,107 @@ export class Game {
     const state = this.state; const { player, entities } = state;
     state.shieldCooldown = Math.max(0, state.shieldCooldown - delta); state.shieldTime = Math.max(0, state.shieldTime - delta); state.chargeTimer = Math.max(0, state.chargeTimer - delta);
     if (state.powers.shield && state.shieldTime <= 0 && state.shieldCooldown <= 0) { state.shieldTime = 2.4 + .8 * state.powers.shield; state.shieldCooldown = Math.max(7, 16 - 2 * state.powers.shield); this.burst(player.x, player.y, '#81ffca', 18, .7); }
-    if (state.powers.companion && entities.enemies.length) { state.companionShotTimer -= delta; if (state.companionShotTimer <= 0) { for (let index = 0; index < Math.min(4, state.powers.companion); index += 1) this.companionShoot(index); state.companionShotTimer = Math.max(.25, .75 - .06 * state.powers.companion); } }
+    if (state.powers.companion) this.updateCompanions(delta);
     if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ x: player.x, y: player.y, maxRadius: radius, life: .65, duration: .65, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
+    if (state.powers.singularity) {
+      state.singularityTimer -= delta;
+      if (state.singularityTimer <= 0) {
+        const radius = 230 + state.powers.singularity * 24;
+        for (const enemy of entities.enemies) {
+          if (distance(player, enemy) > radius) continue;
+          const angle = angleTo(enemy, player);
+          const pull = enemy.type === 'boss' || enemy.type === 'miniboss' ? 18 : 74;
+          enemy.x += Math.cos(angle) * pull;
+          enemy.y += Math.sin(angle) * pull;
+          enemy.slow = Math.max(enemy.slow, .55 + state.powers.singularity * .08);
+          enemy.hp -= player.damage * (.7 + state.powers.singularity * .2);
+        }
+        this.burst(player.x, player.y, '#ba8cff', 44, 1.4);
+        entities.rings.push({ x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#b78bff' });
+        state.singularityTimer = Math.max(4.2, 8 - state.powers.singularity * .7);
+        this.audio.play(125, .38, 'triangle', .09);
+      }
+    }
+    if (state.powers.ionStorm) {
+      state.ionStormTimer -= delta;
+      if (state.ionStormTimer <= 0 && entities.enemies.length) {
+        const count = Math.min(5, 2 + state.powers.ionStorm);
+        const targets = [...entities.enemies].sort(() => Math.random() - .5).slice(0, count);
+        for (const enemy of targets) {
+          enemy.hp -= player.damage * (1.15 + state.powers.ionStorm * .28);
+          enemy.slow = Math.max(enemy.slow, .35);
+          this.burst(enemy.x, enemy.y, '#a9f9ff', 14, 1.1);
+          entities.rings.push({ x: enemy.x, y: enemy.y, maxRadius: enemy.radius + 28, life: .35, duration: .35, color: '#85f2ff' });
+        }
+        this.label(player.x, player.y - 42, 'TEMPESTADE IÔNICA', '#a9f9ff');
+        state.ionStormTimer = Math.max(2.4, 5 - state.powers.ionStorm * .45);
+        this.audio.play(520, .2, 'sawtooth', .06);
+      }
+    }
+  }
+
+  updateCompanions(delta) {
+    const state = this.state;
+    const { player, entities, companions } = state;
+    const count = companions.length;
+    const interceptEnabled = state.powers.companion >= 3;
+    const fireInterval = Math.max(.24, .82 * Math.pow(.86, state.powers.companion - 1));
+    for (let index = 0; index < count; index += 1) {
+      const companion = companions[index];
+      companion.disabledTimer = Math.max(0, companion.disabledTimer - delta);
+      companion.hitFlash = Math.max(0, companion.hitFlash - delta);
+      companion.shootTimer -= delta;
+      companion.phase = state.time * 1.25 + index * TAU / count;
+      const orbitRadius = 52 + index % 2 * 12;
+      const homeX = player.x + Math.cos(companion.phase) * orbitRadius;
+      const homeY = player.y + Math.sin(companion.phase) * orbitRadius;
+      const intercept = interceptEnabled && companion.disabledTimer <= 0 ? this.findProjectileIntercept(companion) : null;
+      companion.intercepting = Boolean(intercept);
+      const targetX = intercept?.x ?? homeX;
+      const targetY = intercept?.y ?? homeY;
+      this.moveCompanionToward(companion, targetX, targetY, intercept ? 540 : 390, delta);
+      companion.angle = Math.atan2(targetY - companion.y, targetX - companion.x);
+      if (companion.disabledTimer <= 0 && entities.enemies.length && companion.shootTimer <= 0) {
+        this.companionShoot(companion);
+        companion.shootTimer = fireInterval;
+      }
+    }
+  }
+
+  findProjectileIntercept(companion) {
+    const state = this.state;
+    const { player, entities } = state;
+    let best = null;
+    for (const bullet of entities.enemyBullets) {
+      const speed = Math.hypot(bullet.vx, bullet.vy);
+      if (!speed) continue;
+      const ux = bullet.vx / speed;
+      const uy = bullet.vy / speed;
+      const toPlayerX = player.x - bullet.x;
+      const toPlayerY = player.y - bullet.y;
+      const along = toPlayerX * ux + toPlayerY * uy;
+      if (along <= 0 || along > speed * 1.15) continue;
+      const miss = Math.abs(toPlayerX * uy - toPlayerY * ux);
+      if (miss > player.radius + bullet.radius + 18) continue;
+      const safeDistance = player.radius + bullet.radius + 10;
+      const x = bullet.x + ux * Math.max(0, along - safeDistance);
+      const y = bullet.y + uy * Math.max(0, along - safeDistance);
+      const timeToIntercept = distance(companion, { x, y }) / 540;
+      const timeToImpact = along / speed;
+      if (timeToIntercept > timeToImpact + .04) continue;
+      if (!best || timeToImpact < best.timeToImpact) best = { x, y, timeToImpact };
+    }
+    return best;
+  }
+
+  moveCompanionToward(companion, x, y, speed, delta) {
+    const dx = x - companion.x;
+    const dy = y - companion.y;
+    const distanceToTarget = Math.hypot(dx, dy);
+    if (!distanceToTarget) return;
+    const step = Math.min(distanceToTarget, speed * delta);
+    companion.x += dx / distanceToTarget * step;
+    companion.y += dy / distanceToTarget * step;
   }
 
   spawnEnemies(delta) {
@@ -194,13 +293,25 @@ export class Game {
     player.angle = center;
     for (let index = 0; index < player.shots; index += 1) {
       const angle = center + (index - (player.shots - 1) / 2) * .16;
-      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * 710, vy: Math.sin(angle) * 710, speed: 710, target: state.powers.aimbot ? target : null, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow });
+      const speed = player.projectileSpeed;
+      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, target: state.powers.aimbot ? target : null, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow });
     }
     this.audio.play(450, .055, 'triangle', .016);
     this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, '#70f5ff', 3, .35);
   }
 
-  companionShoot(index) { const state = this.state; const player = state.player; const angle = state.time * 1.6 + index * TAU / Math.min(4, state.powers.companion); const x = player.x + Math.cos(angle) * 44; const y = player.y + Math.sin(angle) * 44; const target = state.entities.enemies.reduce((nearest, enemy) => !nearest || distance({ x, y }, enemy) < distance({ x, y }, nearest) ? enemy : nearest, null); if (!target) return; const shotAngle = angleTo({ x, y }, target); state.entities.bullets.push({ x, y, vx: Math.cos(shotAngle) * 570, vy: Math.sin(shotAngle) * 570, life: 1.2, radius: 4, damage: player.damage * .7, pierce: 0, hit: new Set(), critical: false, slow: player.slow }); }
+  companionShoot(companion) {
+    const state = this.state;
+    const player = state.player;
+    const origin = { x: companion.x, y: companion.y };
+    const target = state.entities.enemies.reduce((nearest, enemy) => !nearest || distance(origin, enemy) < distance(origin, nearest) ? enemy : nearest, null);
+    if (!target) return;
+    const angle = angleTo(origin, target);
+    const level = state.powers.companion;
+    const speed = 570 + Math.min(level - 1, 5) * 22;
+    const damage = player.damage * Math.min(.9, .42 + (level - 1) * .09);
+    state.entities.bullets.push({ x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1.2, radius: 4, damage, pierce: 0, hit: new Set(), critical: false, slow: player.slow, companionShot: true });
+  }
 
   updateBullets(delta) {
     const state = this.state; const { bullets, enemies } = state.entities;
@@ -350,7 +461,30 @@ export class Game {
     }
   }
 
-  updateEnemyBullets(delta) { const state = this.state; const { enemyBullets } = state.entities; for (let index = enemyBullets.length - 1; index >= 0; index -= 1) { const bullet = enemyBullets[index]; bullet.x += bullet.vx * delta; bullet.y += bullet.vy * delta; bullet.life -= delta; if (distance(bullet, state.player) < state.player.radius + bullet.radius) { this.hurt(bullet.damage); enemyBullets.splice(index, 1); } else if (bullet.life <= 0) enemyBullets.splice(index, 1); } }
+  updateEnemyBullets(delta) {
+    const state = this.state;
+    const { enemyBullets } = state.entities;
+    for (let index = enemyBullets.length - 1; index >= 0; index -= 1) {
+      const bullet = enemyBullets[index];
+      bullet.x += bullet.vx * delta;
+      bullet.y += bullet.vy * delta;
+      bullet.life -= delta;
+      const interceptor = state.powers.companion >= 3
+        ? state.companions.find(companion => companion.disabledTimer <= 0 && distance(bullet, companion) < 9 + bullet.radius)
+        : null;
+      if (interceptor) {
+        interceptor.disabledTimer = 2;
+        interceptor.hitFlash = .3;
+        interceptor.intercepting = false;
+        this.burst(interceptor.x, interceptor.y, '#ffb36b', 12, .8);
+        this.label(interceptor.x, interceptor.y - 20, 'DRONE OFFLINE · 2s', '#ffc17c');
+        enemyBullets.splice(index, 1);
+      } else if (distance(bullet, state.player) < state.player.radius + bullet.radius) {
+        this.hurt(bullet.damage);
+        enemyBullets.splice(index, 1);
+      } else if (bullet.life <= 0) enemyBullets.splice(index, 1);
+    }
+  }
 
   collectGems(delta) { const state = this.state; const { player, gems } = state.entities ? { player: state.player, gems: state.entities.gems } : {}; for (let index = gems.length - 1; index >= 0; index -= 1) { const gem = gems[index]; const currentDistance = distance(gem, player); if (currentDistance < player.magnet) { const angle = angleTo(gem, player); const speed = (player.magnet - currentDistance) * 5 + 100; gem.x += Math.cos(angle) * speed * delta; gem.y += Math.sin(angle) * speed * delta; } if (currentDistance < 20) { state.xp += gem.value; gems.splice(index, 1); this.audio.play(650 + state.xp * 4, .045, 'sine', .008); } } }
 
@@ -362,6 +496,10 @@ export class Game {
     const state = this.state;
     state.xp -= state.nextXp;
     state.level += 1;
+    const previousMaxHp = state.player.maxHp;
+    state.player.maxHp = Math.ceil(previousMaxHp * 1.5);
+    const hpBonus = state.player.maxHp - previousMaxHp;
+    state.player.hp = Math.min(state.player.maxHp, state.player.hp + hpBonus);
     state.nextXp = Math.ceil(state.nextXp * 1.28 + 4);
     const count = Math.min(40, 9 + state.level * 2);
     for (let index = 0; index < count; index += 1) this.spawn(state.level >= 4 && index % 5 === 0 ? 'tank' : index % 3 === 0 ? 'runner' : 'grunt');
@@ -370,6 +508,7 @@ export class Game {
       this.spawn('miniboss', { variant });
       this.label(this.renderer.width / 2, this.renderer.height * .24, `⚠ MINI-CHEFE · ${variant.name}`, variant.color);
     }
+    this.label(state.player.x, state.player.y - 40, `CASCO +50% · +${hpBonus} VIDA`, '#80ffc2');
     this.label(this.renderer.width / 2, this.renderer.height * .32, `⚠ HORDA DO NÍVEL ${state.level}`, '#ffba74');
     state.mode = 'choice';
     const choices = pickChoices(UPGRADES, 3);
@@ -394,7 +533,13 @@ export class Game {
     const state = this.state;
     const player = state.player;
     state.powers[power.key] += 1;
-    if (power.key === 'companion') player.move = Math.max(120, player.move * .95);
+    if (power.key === 'companion') {
+      player.move = Math.max(120, player.move * .95);
+      if (state.companions.length < 4) {
+        const phase = state.time * 1.25 + state.companions.length * TAU / (state.companions.length + 1);
+        state.companions.push({ x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
+      }
+    }
     if (power.key === 'shield') {
       player.rate = Math.min(1.35, player.rate * 1.1);
       state.shieldTime = 4;
@@ -406,6 +551,20 @@ export class Game {
       player.maxHp = Math.max(60, player.maxHp - 8);
       player.hp = Math.min(player.hp, player.maxHp);
       state.novaTimer = 1;
+    }
+    if (power.key === 'overdrive') {
+      player.rate = Math.max(.13, player.rate * .84);
+      player.damage *= 1.12;
+      player.move = Math.max(120, player.move * .94);
+    }
+    if (power.key === 'singularity') {
+      player.maxHp = Math.max(60, player.maxHp - 5);
+      player.hp = Math.min(player.hp, player.maxHp);
+      state.singularityTimer = 1.2;
+    }
+    if (power.key === 'ionStorm') {
+      player.armor = Math.max(-.3, player.armor - .04);
+      state.ionStormTimer = .8;
     }
   }
 
@@ -428,7 +587,8 @@ export class Game {
     const { player } = state;
     const target = state.powers.aimbot ? this.nearestEnemy(player) : null;
     const angle = target ? angleTo(player, target) : this.input.pointer.active ? Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x) : player.angle;
-    state.entities.bullets.push({ x: player.x + Math.cos(angle) * 20, y: player.y + Math.sin(angle) * 20, vx: Math.cos(angle) * 590, vy: Math.sin(angle) * 590, speed: 590, target, life: 1.8, radius: 14, damage: player.damage * (3 + state.powers.charged), pierce: 4 + state.powers.charged * 2, hit: new Set(), critical: true, slow: player.slow, charged: true });
+    const speed = 590 * player.projectileSpeed / 710;
+    state.entities.bullets.push({ x: player.x + Math.cos(angle) * 20, y: player.y + Math.sin(angle) * 20, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, target, life: 1.8, radius: 14, damage: player.damage * (3 + state.powers.charged), pierce: 4 + state.powers.charged * 2, hit: new Set(), critical: true, slow: player.slow, charged: true });
     state.chargeTimer = Math.max(2.8, 7 - state.powers.charged * .7);
     this.audio.play(150, .45, 'sawtooth', .1);
     this.burst(player.x, player.y, '#ffcf67', 26, 1);
@@ -436,7 +596,7 @@ export class Game {
 
   dash() { const state = this.state; if (!state || state.mode !== 'playing' || state.player.dash > 0) return; const player = state.player; player.dash = player.dashCooldown; player.dashTime = .38; player.invulnerable = Math.max(player.invulnerable, .42); this.burst(player.x, player.y, '#7ffaff', 22, 1.3); this.audio.play(280, .18, 'sawtooth', .06); }
 
-  hurt(amount) { const state = this.state; const { player } = state; if (player.invulnerable > 0 || player.dashTime > 0 || state.shieldTime > 0) return; player.hp -= amount; player.invulnerable = .55; state.shake = 11; state.flash = .22; this.burst(player.x, player.y, '#ff587e', 15); this.label(player.x, player.y - 25, `-${Math.round(amount)}`, '#ff8098'); this.audio.play(180, .16, 'sawtooth', .065); if (player.hp <= 0) this.gameOver(); }
+  hurt(amount) { const state = this.state; const { player } = state; if (player.invulnerable > 0 || player.dashTime > 0 || state.shieldTime > 0) return; const damage = Math.max(1, amount * (1 - player.armor)); player.hp -= damage; player.invulnerable = .55; state.shake = 11; state.flash = .22; this.burst(player.x, player.y, '#ff587e', 15); this.label(player.x, player.y - 25, `-${Math.round(damage)}`, '#ff8098'); this.audio.play(180, .16, 'sawtooth', .065); if (player.hp <= 0) this.gameOver(); }
 
   gameOver() { const state = this.state; state.mode = 'dead'; state.shake = 20; this.burst(state.player.x, state.player.y, '#71f5ff', 65, 2); this.audio.play(130, .65, 'sawtooth', .14); this.bestScore = Math.max(this.bestScore, state.score); saveBestScore(this.bestScore); this.ui.showGameOver(state, this.bestScore); }
 

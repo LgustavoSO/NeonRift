@@ -87,6 +87,7 @@ export class Renderer {
     for (const bullet of enemyBullets) this.drawEnemyBullet(context, bullet);
     for (const enemy of enemies) this.drawEnemy(context, enemy, now);
     if (state.powers.aimbot && state.aimTarget && enemies.includes(state.aimTarget)) this.drawTargetLock(context, state.aimTarget, now);
+    for (const companion of state.companions) this.drawCompanion(context, companion, now);
     this.drawPlayer(context, state, now);
     for (const particle of particles) { context.globalAlpha = clamp(particle.life / particle.maxLife, 0, 1); context.fillStyle = particle.color; context.beginPath(); context.arc(particle.x, particle.y, particle.radius, 0, TAU); context.fill(); }
     context.globalAlpha = 1;
@@ -140,16 +141,41 @@ export class Renderer {
 
   drawPlayer(context, state, now) {
     const { player } = state;
-    context.save(); context.translate(player.x, player.y); context.rotate(player.angle + Math.PI / 2); if (player.invulnerable > 0 && Math.floor(now / 65) % 2) context.globalAlpha = .4; context.shadowBlur = 25; context.shadowColor = '#50eaff'; context.fillStyle = '#111d38'; context.strokeStyle = '#8af5ff'; context.lineWidth = 2.5; context.beginPath(); context.moveTo(0, -19); context.lineTo(13, 12); context.lineTo(0, 7); context.lineTo(-13, 12); context.closePath(); context.fill(); context.stroke(); const thrusterColor = player.dashTime > 0 ? '#ffffff' : player.dash <= 0 ? '#ffd34f' : '#42d9ff'; context.fillStyle = thrusterColor; context.shadowColor = thrusterColor; context.shadowBlur = player.dash <= 0 ? 22 : 15; context.beginPath(); context.moveTo(-6, 12); context.lineTo(0, player.dashTime > 0 ? 35 : player.dash <= 0 ? 31 + Math.sin(now * .012) * 2 : 28); context.lineTo(6, 12); context.fill(); context.restore();
+    context.save(); context.translate(player.x, player.y); context.rotate(player.angle + Math.PI / 2); if (player.invulnerable > 0 && Math.floor(now / 65) % 2) context.globalAlpha = .4;
+    const thrusterColor = player.dashTime > 0 ? '#ffffff' : player.dash <= 0 ? '#ffd34f' : '#42d9ff';
+    context.shadowBlur = 25; context.shadowColor = '#50eaff'; context.fillStyle = '#10233c'; context.strokeStyle = '#9af7ff'; context.lineWidth = 2.4;
+    context.beginPath(); context.moveTo(0, -22); context.lineTo(8, -7); context.lineTo(26, 9); context.lineTo(11, 7); context.lineTo(8, 17); context.lineTo(0, 12); context.lineTo(-8, 17); context.lineTo(-11, 7); context.lineTo(-26, 9); context.lineTo(-8, -7); context.closePath(); context.fill(); context.stroke();
+    context.shadowBlur = 12; context.strokeStyle = '#55dfff'; context.lineWidth = 1.6; context.beginPath(); context.moveTo(-18, 8); context.lineTo(-7, 1); context.lineTo(0, 3); context.lineTo(7, 1); context.lineTo(18, 8); context.stroke();
+    context.fillStyle = '#d8fcff'; context.shadowColor = '#8ffaff'; context.shadowBlur = 16; context.beginPath(); context.ellipse(0, -6, 3.3, 8, 0, 0, TAU); context.fill();
+    context.fillStyle = thrusterColor; context.shadowColor = thrusterColor; context.shadowBlur = player.dash <= 0 ? 22 : 15; context.beginPath(); context.moveTo(-5, 12); context.lineTo(0, player.dashTime > 0 ? 35 : player.dash <= 0 ? 31 + Math.sin(now * .012) * 2 : 27); context.lineTo(5, 12); context.fill(); context.restore();
     if (state.shieldTime > 0) { context.strokeStyle = '#8cffc9'; context.shadowBlur = 25; context.shadowColor = '#76ffbd'; context.lineWidth = 3; context.beginPath(); context.arc(player.x, player.y, 31 + Math.sin(now * .01) * 2, 0, TAU); context.stroke(); context.shadowBlur = 0; }
-    for (let i = 0; i < Math.min(4, state.powers.companion); i += 1) { const angle = state.time * 1.6 + i * TAU / Math.min(4, state.powers.companion); context.fillStyle = '#b4b6ff'; context.shadowBlur = 16; context.shadowColor = '#949aff'; hexagon(context, player.x + Math.cos(angle) * 44, player.y + Math.sin(angle) * 44, 7, now * .002); context.fill(); context.shadowBlur = 0; }
+  }
+
+  drawCompanion(context, companion, now) {
+    const disabled = companion.disabledTimer > 0;
+    context.save();
+    if (companion.intercepting) { context.strokeStyle = '#a8fbff88'; context.lineWidth = 1; context.setLineDash([3, 4]); context.beginPath(); context.moveTo(companion.x, companion.y); context.lineTo(companion.x + Math.cos(companion.angle) * 24, companion.y + Math.sin(companion.angle) * 24); context.stroke(); }
+    context.translate(companion.x, companion.y);
+    context.rotate(companion.angle + Math.PI / 2);
+    context.globalAlpha = disabled ? .58 : 1;
+    context.shadowBlur = companion.hitFlash > 0 ? 25 : 17;
+    context.shadowColor = companion.hitFlash > 0 ? '#ffae6b' : '#bda4ff';
+    context.fillStyle = disabled ? '#443b43' : '#211e45';
+    context.strokeStyle = companion.hitFlash > 0 ? '#ffc17c' : '#d3c8ff';
+    context.lineWidth = 1.8;
+    context.beginPath();
+    context.moveTo(0, -11); context.quadraticCurveTo(9, -8, 11, 0); context.quadraticCurveTo(8, 7, 1, 9); context.lineTo(0, 5); context.lineTo(-1, 9); context.quadraticCurveTo(-8, 7, -11, 0); context.quadraticCurveTo(-9, -8, 0, -11); context.closePath();
+    context.fill(); context.stroke();
+    if (!disabled) { context.fillStyle = '#8cf8ff'; context.shadowColor = '#82efff'; context.shadowBlur = 11; context.beginPath(); context.ellipse(0, -2, 2.2, 4, 0, 0, TAU); context.fill(); }
+    context.restore();
+    if (disabled) { context.textAlign = 'center'; context.font = 'bold 9px system-ui'; context.fillStyle = '#ffc17c'; context.fillText(`${companion.disabledTimer.toFixed(1)}s`, companion.x, companion.y - 15); }
   }
 
   drawHud(context, state, bestScore, width) {
     const { player } = state;
     const padding = width < 600 ? 13 : 25;
     const panelWidth = width < 600 ? 224 : 238;
-    const panelHeight = 139;
+    const panelHeight = 154;
     context.fillStyle = '#081426dc';
     context.fillRect(padding, padding, panelWidth, panelHeight);
     context.strokeStyle = '#407590';
@@ -175,15 +201,17 @@ export class Renderer {
     const stats = [
       { label: 'DANO', value: Math.round(player.damage) },
       { label: 'CADÊNCIA', value: `${(1 / player.rate).toFixed(1)}/s` },
-      { label: 'VELOCIDADE', value: `${Math.round(player.move)}` },
+      { label: 'MOVIMENTO', value: `${Math.round(player.move)}` },
       { label: 'CRÍTICO', value: `${Math.round(player.crit * 100)}%` },
+      { label: 'BLINDAGEM', value: `${Math.round(player.armor * 100)}%` },
+      { label: 'PROJÉTIL', value: `${Math.round(player.projectileSpeed)}` },
     ];
     const columnWidth = (panelWidth - 22) / 2;
     stats.forEach((stat, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2);
       const x = padding + 11 + column * columnWidth;
-      const y = padding + 95 + row * 20;
+      const y = padding + 94 + row * 17;
       context.fillStyle = '#82a4ba';
       context.font = '9px system-ui';
       context.fillText(stat.label, x, y);
@@ -202,8 +230,8 @@ export class Renderer {
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
     context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 60);
-    const powerIcons = { companion: '🤖', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯' };
-    const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${powerIcons[key]}×${value}`).join('  ');
+    const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩' };
+    const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => key === 'companion' ? `🛸${state.companions.length} L${value}` : `${powerIcons[key]}×${value}`).join('  ');
     context.fillStyle = '#d5b4ff';
     context.font = '12px system-ui';
     context.fillText(activePowers, width - padding, padding + 80);
