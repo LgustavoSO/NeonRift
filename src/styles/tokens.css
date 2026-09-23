@@ -1,0 +1,14 @@
+:root {
+  color-scheme: dark;
+  --ink: #e9faff;
+  --muted: #9bb3c6;
+  --panel: #0b1428e8;
+  --panel-raised: #132643;
+  --line: #4adfff80;
+  --cyan: #61f6ff;
+  --blue: #1885ee;
+  --pink: #ff4fc6;
+  --green: #4df8a8;
+  --font-display: "Arial Narrow", "Bahnschrift Condensed", system-ui, sans-serif;
+  --font-body: Inter, ui-sans-serif, system-ui, sans-serif;
+}

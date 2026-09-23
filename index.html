@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#050812" />
+    <title>NEON RIFT — Arena</title>
+    <link rel="stylesheet" href="/src/styles/main.css" />
+  </head>
+  <body>
+    <main id="game-shell" aria-label="Neon Rift">
+      <canvas id="game-canvas" aria-label="Arena de jogo"></canvas>
+
+      <div class="touch-controls" aria-label="Controles de toque">
+        <div class="joystick" id="joystick"><div class="joystick__nub" id="joystick-nub"></div></div>
+        <button class="touch-controls__dash" id="dash-touch" type="button">DASH</button>
+      </div>
+
+      <section class="screen screen--menu" id="menu-screen" aria-labelledby="menu-title">
+        <div class="panel panel--hero">
+          <span class="eyebrow">um pequeno universo em expansão</span>
+          <h1 id="menu-title">NEON<br />RIFT</h1>
+          <p>Sobreviva à arena, monte sua combinação de melhorias e enfrente Guardiões que aprendem com o seu estilo.</p>
+          <div class="key-list">
+            <span><kbd>W A S D</kbd> mover</span>
+            <span><kbd>Mouse</kbd> mirar</span>
+            <span><kbd>Espaço</kbd> impulso</span>
+            <span><kbd>P</kbd> pausa</span>
+          </div>
+          <button class="primary-button" id="play-button" type="button">ENTRAR NA ARENA <span>→</span></button>
+          <p class="hint">Mire com o mouse; os tiros saem automaticamente. Clique esquerdo dispara um tiro carregado quando disponível.</p>
+        </div>
+      </section>
+
+      <section class="screen screen--choice is-hidden" id="choice-screen" aria-labelledby="choice-title">
+        <div class="panel">
+          <span class="eyebrow" id="choice-eyebrow">evolução</span>
+          <h2 id="choice-title">Escolha uma melhoria</h2>
+          <div class="choice-grid" id="choice-grid"></div>
+          <p class="hint">Teclas 1, 2 ou 3 também funcionam</p>
+        </div>
+      </section>
+
+      <section class="screen screen--choice is-hidden" id="end-screen" aria-labelledby="end-title">
+        <div class="panel">
+          <span class="eyebrow">transmissão encerrada</span>
+          <h2 id="end-title">A arena venceu desta vez</h2>
+          <p id="end-stats"></p>
+          <button class="primary-button" id="again-button" type="button">TENTAR NOVAMENTE <span>→</span></button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
