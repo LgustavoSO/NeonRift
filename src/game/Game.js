@@ -25,6 +25,8 @@ const MINI_BOSS_VARIANTS = [
   { id: 'bomber', name: 'DETONADOR', color: '#e779ff' },
 ];
 
+const RUN_RULES = { bossesToWin: 3, waveLength: 24, waveDeadline: 35, waveBreak: 2.4, enemyCap: 78 };
+
 export class Game {
   constructor({ renderer, input, ui }) {
     this.renderer = renderer;
@@ -69,6 +71,7 @@ export class Game {
     const state = this.state;
     const { player, entities } = state;
     state.time += delta; state.waveClock += delta; state.asteroidTimer -= delta; state.healTimer -= delta;
+    state.waveBreak = Math.max(0, state.waveBreak - delta);
     this.updateWorldHazards(delta);
     this.updatePlayer(delta);
     this.updatePowers(delta);
@@ -79,7 +82,7 @@ export class Game {
     this.collectGems(delta);
     this.updateParticles(delta);
     state.shake = Math.max(0, state.shake - 28 * delta); state.flash = Math.max(0, state.flash - delta);
-    if (state.waveClock > 24 && entities.enemies.length < Math.max(3, state.wave * 2)) this.nextWave();
+    if (state.waveClock >= RUN_RULES.waveLength && (entities.enemies.length < Math.max(3, state.wave * 2) || state.waveClock >= RUN_RULES.waveDeadline)) this.nextWave();
     if (state.pendingBossRewards > 0 && state.mode === 'playing') this.openBossReward();
     if (state.xp >= state.nextXp && state.mode === 'playing') this.levelUp();
   }
@@ -223,9 +226,9 @@ export class Game {
   spawnEnemies(delta) {
     const state = this.state;
     const pressure = this.threatLevel();
-    const maximum = Math.min(145, 12 + state.wave * 5 + state.level * 2 + this.powerCount() * 3);
+    const maximum = Math.min(RUN_RULES.enemyCap, 12 + state.wave * 5 + state.level * 2 + this.powerCount() * 3);
     state.spawnTimer -= delta;
-    if (state.spawnTimer > 0 || state.entities.enemies.length >= maximum) return;
+    if (state.waveBreak > 0 || state.spawnTimer > 0 || state.entities.enemies.length >= maximum) return;
     const roll = Math.random();
     const type = state.wave >= 3 && roll < .16 ? 'sniper' : state.wave >= 2 && roll < .37 ? 'runner' : state.wave >= 4 && roll < .53 ? 'tank' : 'grunt';
     this.spawn(type);
@@ -259,15 +262,23 @@ export class Game {
 
   spawnBoss() {
     const state = this.state;
-    const variant = BOSS_VARIANTS[state.bossSequence % BOSS_VARIANTS.length];
+    const isFinalBoss = state.bossSequence >= RUN_RULES.bossesToWin - 1;
+    const variant = isFinalBoss
+      ? { id: 'rift-core', name: 'NÚCLEO DO RIFT', color: '#ffe783' }
+      : BOSS_VARIANTS[state.bossSequence % BOSS_VARIANTS.length];
     state.bossSequence += 1;
     const boss = this.spawn('boss', { variant });
     const player = state.player;
     boss.adaptive = { shield: player.rate < .29 || player.shots > 1 || player.pierce > 0, agile: player.move > 185 || player.dashCooldown < 3, armor: player.damage > 19 || player.crit > .06, resist: player.slow > 0, barrage: player.maxHp > 100 || player.hp > 100 };
     boss.hp *= 1 + (state.level - 5) * .1;
+    if (isFinalBoss) {
+      boss.isFinalBoss = true;
+      boss.radius = 49;
+      boss.hp *= 1.65;
+    }
     boss.maxHp = boss.hp;
     boss.shootTimer = .8;
-    this.label(this.renderer.width / 2, this.renderer.height * .25, `⚠ GUARDIÃO ${variant.name} · NÍVEL ${state.level}`, variant.color);
+    this.label(this.renderer.width / 2, this.renderer.height * .25, `${isFinalBoss ? '☢ CHEFE FINAL' : '⚠ GUARDIÃO'} ${variant.name} · NÍVEL ${state.level}`, variant.color);
     this.audio.play(170, .6, 'sawtooth', .11);
   }
 
@@ -403,7 +414,12 @@ export class Game {
   fireBossPattern(boss, direction) {
     const state = this.state;
     const broadside = boss.adaptive?.barrage ? 13 : 9;
-    if (boss.bossVariant.id === 'lancer') {
+    if (boss.bossVariant.id === 'rift-core') {
+      boss.finalAttackMode = !boss.finalAttackMode;
+      if (boss.finalAttackMode) this.firePattern(boss, boss.pulse * .42, 10, TAU / 10, 190, 10);
+      else this.firePattern(boss, direction, 5, .13, 255, 12);
+      boss.shootTimer = 1.45;
+    } else if (boss.bossVariant.id === 'lancer') {
       this.firePattern(boss, direction, 5, .12, 260, 12);
       boss.shootTimer = boss.adaptive?.agile ? 1.05 : 1.4;
     } else if (boss.bossVariant.id === 'tempest') {
@@ -439,9 +455,11 @@ export class Game {
     const pieces = isBoss ? 16 : isMiniBoss ? 8 : enemy.type === 'tank' ? 4 : 1;
     for (let index = 0; index < pieces; index += 1) gems.push({ x: enemy.x + random(-16, 16), y: enemy.y + random(-16, 16), value: isBoss ? 5 : isMiniBoss ? 3 : enemy.type === 'tank' ? 3 : 2, radius: 5 });
     if (isBoss) {
+      state.bossesDefeated += 1;
       state.pendingBossRewards += 1;
       state.score += 2000;
-      this.label(enemy.x, enemy.y, 'GUARDIÃO DESTRUÍDO +2000', '#ffe687');
+      if (enemy.isFinalBoss) state.finalBossDefeated = true;
+      this.label(enemy.x, enemy.y, `${enemy.isFinalBoss ? 'NÚCLEO DO RIFT DESTRUÍDO' : 'GUARDIÃO DESTRUÍDO'} +2000`, '#ffe687');
       this.audio.play(950, .4, 'sawtooth', .1);
     } else if (isMiniBoss) {
       state.score += 650;
@@ -477,7 +495,7 @@ export class Game {
 
   updateParticles(delta) { const { particles, floaters } = this.state.entities; for (let index = particles.length - 1; index >= 0; index -= 1) { const particle = particles[index]; particle.x += particle.vx * delta; particle.y += particle.vy * delta; particle.vx *= .975; particle.vy *= .975; particle.life -= delta; if (particle.life <= 0) particles.splice(index, 1); } for (let index = floaters.length - 1; index >= 0; index -= 1) { const floater = floaters[index]; floater.y -= 25 * delta; floater.life -= delta; if (floater.life <= 0) floaters.splice(index, 1); } }
 
-  nextWave() { this.state.wave += 1; this.state.waveClock = 0; this.state.spawnTimer = 1.2; this.label(this.renderer.width / 2, this.renderer.height * .28, `ONDA ${this.state.wave}`, '#6feeff'); this.audio.play(260, .35, 'sawtooth', .08); }
+  nextWave() { this.state.wave += 1; this.state.waveClock = 0; this.state.waveBreak = RUN_RULES.waveBreak; this.state.spawnTimer = RUN_RULES.waveBreak; this.label(this.renderer.width / 2, this.renderer.height * .28, `ONDA ${this.state.wave} · REAGRUPAMENTO`, '#6feeff'); this.audio.play(260, .35, 'sawtooth', .08); }
 
   levelUp() {
     const state = this.state;
@@ -486,9 +504,9 @@ export class Game {
     const hpRestored = Math.min(Math.ceil(state.player.maxHp * .5), state.player.maxHp - state.player.hp);
     state.player.hp += hpRestored;
     state.nextXp = Math.ceil(state.nextXp * 1.28 + 4);
-    const count = Math.min(40, 9 + state.level * 2);
+    const count = Math.min(40, 9 + state.level * 2, Math.max(0, RUN_RULES.enemyCap - state.entities.enemies.length));
     for (let index = 0; index < count; index += 1) this.spawn(state.level >= 4 && index % 5 === 0 ? 'tank' : index % 3 === 0 ? 'runner' : 'grunt');
-    if (state.level >= 4 && state.level % 2 === 0) {
+    if (state.level >= 4 && (state.level - 4) % 4 === 0) {
       const variant = MINI_BOSS_VARIANTS[Math.floor(state.level / 2) % MINI_BOSS_VARIANTS.length];
       this.spawn('miniboss', { variant });
       this.label(this.renderer.width / 2, this.renderer.height * .24, `⚠ MINI-CHEFE · ${variant.name}`, variant.color);
@@ -577,6 +595,7 @@ export class Game {
         state.pendingBossRewards -= 1;
         if (selected.key === 'nova') state.novaTimer = 2;
         if (state.pendingBossRewards > 0) this.openBossReward();
+        else if (state.finalBossDefeated) this.finishRun('victory');
         else if (state.xp >= state.nextXp) this.levelUp();
         else { state.mode = 'playing'; this.ui.showPlaying(); }
       };
@@ -602,7 +621,19 @@ export class Game {
 
   hurt(amount) { const state = this.state; const { player } = state; if (player.invulnerable > 0 || player.dashTime > 0 || state.shieldTime > 0) return; const damage = Math.max(1, amount * (1 - player.armor)); player.hp -= damage; player.invulnerable = .55; state.shake = 11; state.flash = .22; this.burst(player.x, player.y, '#ff587e', 15); this.label(player.x, player.y - 25, `-${Math.round(damage)}`, '#ff8098'); this.audio.play(180, .16, 'sawtooth', .065); if (player.hp <= 0) this.gameOver(); }
 
-  gameOver() { const state = this.state; state.mode = 'dead'; state.shake = 20; this.burst(state.player.x, state.player.y, '#71f5ff', 65, 2); this.audio.play(130, .65, 'sawtooth', .14); this.bestScore = Math.max(this.bestScore, state.score); saveBestScore(this.bestScore); this.ui.showGameOver(state, this.bestScore); }
+  gameOver() { this.finishRun('defeat'); }
+
+  finishRun(outcome) {
+    const state = this.state;
+    state.mode = 'dead';
+    state.outcome = outcome;
+    state.shake = outcome === 'victory' ? 8 : 20;
+    this.burst(state.player.x, state.player.y, outcome === 'victory' ? '#ffe783' : '#71f5ff', outcome === 'victory' ? 90 : 65, outcome === 'victory' ? 2.5 : 2);
+    this.audio.play(outcome === 'victory' ? 880 : 130, outcome === 'victory' ? .8 : .65, outcome === 'victory' ? 'triangle' : 'sawtooth', .14);
+    this.bestScore = Math.max(this.bestScore, state.score);
+    saveBestScore(this.bestScore);
+    this.ui.showGameOver(state, this.bestScore);
+  }
 
   togglePause() { if (!this.state || !['playing', 'paused'].includes(this.state.mode)) return; this.state.mode = this.state.mode === 'playing' ? 'paused' : 'playing'; this.lastTime = performance.now(); }
   burst(x, y, color, amount = 12, power = 1) { const particles = this.state.entities.particles; for (let index = 0; index < amount; index += 1) { const angle = random(0, TAU); const speed = random(30, 180) * power; const life = random(.25, .7); particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life, maxLife: life, radius: random(1, 4), color }); } if (particles.length > 430) particles.splice(0, particles.length - 430); }

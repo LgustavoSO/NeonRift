@@ -77,8 +77,13 @@ export class UIController {
   }
 
   showGameOver(state, bestScore) {
-    document.querySelector('#end-title').textContent = state.level >= 5 ? `Você chegou ao nível ${state.level}` : 'A arena venceu desta vez';
-    document.querySelector('#end-stats').innerHTML = `Pontuação: <b>${state.score}</b> · Abates: <b>${state.kills}</b> · Tempo: <b>${Math.floor(state.time)}s</b><br>Recorde: <b>${bestScore}</b>`;
+    const victory = state.outcome === 'victory';
+    const powerNames = { companion: 'Esquadrão', shield: 'Escudo', charged: 'Tiro carregado', nova: 'Pulso', aimbot: 'Mira automática', overdrive: 'Sobrecarga', singularity: 'Singularidade', ionStorm: 'Tempestade iônica' };
+    const build = Object.entries(state.powers).filter(([, level]) => level > 0).map(([key, level]) => `${powerNames[key]} ${level}`).join(' · ') || 'Canhão de série';
+    document.querySelector('#end-eyebrow').textContent = victory ? 'MISSÃO CONCLUÍDA · NÚCLEO SELADO' : 'TRANSMISSÃO ENCERRADA';
+    document.querySelector('#end-title').textContent = victory ? 'O Rift foi selado' : `A arena venceu · nível ${state.level}`;
+    document.querySelector('#end-stats').innerHTML = `Pontuação: <b>${state.score}</b> · Abates: <b>${state.kills}</b> · Tempo: <b>${Math.floor(state.time)}s</b><br>Guardiões derrotados: <b>${state.bossesDefeated}/3</b> · Recorde: <b>${bestScore}</b><br>Build: <b>${build}</b>`;
+    document.querySelector('#again-button').innerHTML = victory ? 'JOGAR NOVAMENTE <span>↻</span>' : 'TENTAR NOVAMENTE <span>→</span>';
     this.endScreen.classList.remove('is-hidden');
   }
 }

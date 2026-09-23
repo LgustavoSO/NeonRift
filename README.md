@@ -16,6 +16,12 @@ npm run build
 npm run preview
 ```
 
+Para validar as regras centrais da partida:
+
+```bash
+npm test
+```
+
 ## Arquitetura
 
 ```text
@@ -50,13 +56,9 @@ src/
 - **Entrada desacoplada:** mouse, teclado e touch chegam ao jogo pelo mesmo contrato, mantendo a experiência de navegador e celular alinhada.
 - **Progressive enhancement:** áudio e `localStorage` falham silenciosamente quando o navegador não oferece suporte; o jogo continua jogável.
 
-## Próximas fatias recomendadas
+## Plano de evolução
 
-1. Extrair os sistemas de `Game.js` para módulos independentes: `SpawnerSystem`, `CombatSystem`, `ProgressionSystem` e `HazardSystem`.
-2. Criar um catálogo de inimigos e um `RunConfig` para balanceamento sem editar lógica.
-3. Adicionar testes de regras puras: dano, colisão, XP, escolha de upgrade e adaptação de Guardião.
-4. Introduzir tela de meta-progressão e seed de run para replays determinísticos.
-5. Adicionar PWA, manifesto e service worker quando o loop principal estiver estável.
+O projeto está sendo evoluído em fatias: primeiro uma partida completa e legível, depois identidade de builds, balanceamento com testes, progresso entre partidas e robustez offline. O escopo e o estado de cada etapa estão em [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Direção visual
 

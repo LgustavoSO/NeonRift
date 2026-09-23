@@ -131,7 +131,38 @@ export class Renderer {
   drawEnemy(context, enemy, now) {
     const isBoss = enemy.type === 'boss';
     const isMiniBoss = enemy.type === 'miniboss';
-    context.save(); context.translate(enemy.x, enemy.y); context.rotate(enemy.pulse * .18); context.shadowBlur = enemy.elite || isBoss || isMiniBoss ? 25 : 22; context.shadowColor = enemy.elite ? '#ffd36a' : enemy.color; context.strokeStyle = enemy.elite ? '#ffe08a' : enemy.color; context.lineWidth = enemy.elite ? 3 : 2.5; context.fillStyle = '#15203b'; hexagon(context, 0, 0, enemy.radius, Math.PI / 6); context.fill(); context.stroke(); context.fillStyle = enemy.color; hexagon(context, 0, 0, isBoss ? 17 : isMiniBoss ? 12 : enemy.radius * .38, Math.PI / 6); context.fill(); if (isBoss || isMiniBoss || enemy.elite) { context.strokeStyle = isBoss ? '#ffbadf' : enemy.elite ? '#fff0ad' : '#ffe0a8'; context.lineWidth = isBoss ? 3 : 2; hexagon(context, 0, 0, enemy.radius + (isBoss ? 8 : 5), now * (isBoss ? .0008 : .0012)); context.stroke(); } context.restore();
+    context.save();
+    context.translate(enemy.x, enemy.y);
+    context.rotate(enemy.pulse * .18);
+    context.shadowBlur = enemy.elite || isBoss || isMiniBoss ? 25 : 22;
+    context.shadowColor = enemy.elite ? '#ffd36a' : enemy.color;
+    context.strokeStyle = enemy.elite ? '#ffe08a' : enemy.color;
+    context.lineWidth = enemy.elite ? 3 : 2.5;
+    context.fillStyle = '#15203b';
+    hexagon(context, 0, 0, enemy.radius, Math.PI / 6);
+    context.fill();
+    context.stroke();
+    context.fillStyle = enemy.color;
+    hexagon(context, 0, 0, isBoss ? 17 : isMiniBoss ? 12 : enemy.radius * .38, Math.PI / 6);
+    context.fill();
+    if (isBoss || isMiniBoss || enemy.elite) {
+      context.strokeStyle = isBoss ? '#ffbadf' : enemy.elite ? '#fff0ad' : '#ffe0a8';
+      context.lineWidth = isBoss ? 3 : 2;
+      hexagon(context, 0, 0, enemy.radius + (isBoss ? 8 : 5), now * (isBoss ? .0008 : .0012));
+      context.stroke();
+    }
+    if (enemy.isFinalBoss) {
+      context.shadowColor = '#fff3a1';
+      context.shadowBlur = 28;
+      context.strokeStyle = '#fff0a8';
+      context.lineWidth = 2;
+      context.beginPath(); context.ellipse(0, 0, enemy.radius + 12, enemy.radius * .55, now * .00065, 0, TAU); context.stroke();
+      context.strokeStyle = '#ffd662';
+      context.beginPath(); context.ellipse(0, 0, enemy.radius * .55, enemy.radius + 12, -now * .0008, 0, TAU); context.stroke();
+      context.fillStyle = '#fff1a6';
+      context.beginPath(); context.arc(0, 0, 7 + Math.sin(now * .008) * 1.2, 0, TAU); context.fill();
+    }
+    context.restore();
     if (enemy.hp < enemy.maxHp || isBoss || isMiniBoss) {
       const barY = enemy.y - enemy.radius - (isBoss ? 24 : 15);
       if (isBoss || isMiniBoss) { context.textAlign = 'center'; context.font = `bold ${isBoss ? 12 : 10}px system-ui`; context.fillStyle = enemy.color; context.fillText(isBoss ? enemy.bossVariant.name : enemy.miniVariant.name, enemy.x, barY - 5); }
@@ -247,18 +278,21 @@ export class Renderer {
     context.font = '11px system-ui';
     context.fillStyle = '#83aec8';
     context.fillText(`RECORDE ${bestScore}`, width - padding, padding + 40);
+    context.fillStyle = state.bossesDefeated >= 2 ? '#ffe783' : '#83aec8';
+    context.font = 'bold 11px system-ui';
+    context.fillText(`GUARDIÕES ${state.bossesDefeated}/3`, width - padding, padding + 55);
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
-    context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 60);
+    context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 75);
     const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩' };
     const squadLevel = Math.max(0, ...state.companions.map(companion => companion.level));
     const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => key === 'companion' ? `🛸${state.companions.length} · L${squadLevel}` : `${powerIcons[key]}×${value}`).join('  ');
     context.fillStyle = '#d5b4ff';
     context.font = '12px system-ui';
-    context.fillText(activePowers, width - padding, padding + 80);
+    context.fillText(activePowers, width - padding, padding + 95);
     if (state.powers.charged) {
       context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb';
-      context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 99);
+      context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 113);
     }
     if (state.mode === 'paused') { context.fillStyle = '#020914b8'; context.fillRect(0, 0, width, this.height); context.textAlign = 'center'; context.fillStyle = '#fff'; context.font = 'bold 40px system-ui'; context.fillText('PAUSADO', width / 2, this.height / 2); context.font = '16px system-ui'; context.fillText('Pressione P para continuar', width / 2, this.height / 2 + 30); }
   }
