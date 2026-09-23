@@ -9,8 +9,8 @@ export const SHIP_UPGRADES = [
 ];
 
 export const COMPANION_MODELS = [
-  { id: 'scout', name: 'Vaga-lume', role: 'Batedor', icon: '🛸', cost: 55, upgradeCost: 28, maxLevel: 5, damageMultiplier: .72, cadenceMultiplier: 1.35, flightSpeed: 1.2, interceptLevel: 4, color: '#66f5dc', description: 'Dispara rápido e reposiciona-se depressa.' },
-  { id: 'striker', name: 'Lança', role: 'Atacante', icon: '✦', cost: 75, upgradeCost: 38, maxLevel: 5, damageMultiplier: 1.28, cadenceMultiplier: .92, flightSpeed: .95, interceptLevel: 3, color: '#ffc96b', description: 'Tiros fortes; cadência um pouco menor.' },
+  { id: 'scout', name: 'Vaga-lume', role: 'Batedor', icon: '🛸', cost: 55, upgradeCost: 28, maxLevel: 5, damageMultiplier: .72, cadenceMultiplier: 1.35, flightSpeed: 1.2, interceptLevel: 4, slowBonus: .28, color: '#66f5dc', description: 'Tiros rápidos que deixam os inimigos lentos; reposiciona-se depressa.' },
+  { id: 'striker', name: 'Lança', role: 'Atacante', icon: '✦', cost: 75, upgradeCost: 38, maxLevel: 5, damageMultiplier: 1.28, cadenceMultiplier: .92, flightSpeed: .95, interceptLevel: 3, shotPierce: 1, color: '#ffc96b', description: 'Dispara lanças de alto dano que atravessam um inimigo.' },
   { id: 'bulwark', name: 'Égide', role: 'Guardião', icon: '◉', cost: 90, upgradeCost: 45, maxLevel: 5, damageMultiplier: .65, cadenceMultiplier: 1.18, flightSpeed: 1.45, interceptLevel: 2, color: '#91b8ff', description: 'Intercepta projéteis a partir do nível 2.' },
 ];
 

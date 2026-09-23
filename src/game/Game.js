@@ -97,7 +97,7 @@ export class Game {
     const state = this.state;
     const player = state.player;
     const phase = state.time * 1.25 + state.companions.length * TAU / Math.max(1, state.companions.length + 1);
-    state.companions.push({ id: state.companionSequence++, modelId: model.id ?? 'reserve', name: model.name ?? 'Companheiro reserva', icon: model.icon ?? '🛸', color: model.color ?? '#a6fff1', damageMultiplier: model.damageMultiplier ?? 1, cadenceMultiplier: model.cadenceMultiplier ?? 1, flightSpeed: model.flightSpeed ?? 1, interceptLevel: model.interceptLevel ?? 3, level, x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
+    state.companions.push({ id: state.companionSequence++, modelId: model.id ?? 'reserve', name: model.name ?? 'Companheiro reserva', icon: model.icon ?? '🛸', color: model.color ?? '#a6fff1', damageMultiplier: model.damageMultiplier ?? 1, cadenceMultiplier: model.cadenceMultiplier ?? 1, flightSpeed: model.flightSpeed ?? 1, interceptLevel: model.interceptLevel ?? 3, slowBonus: model.slowBonus ?? 0, shotPierce: model.shotPierce ?? 0, level, x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
   }
 
   loop(time) {
@@ -147,7 +147,7 @@ export class Game {
       this.audio.play(180, .38, 'sawtooth', .07);
     }
     for (let index = entities.asteroids.length - 1; index >= 0; index -= 1) { const asteroid = entities.asteroids[index]; asteroid.x += asteroid.vx * delta; asteroid.y += asteroid.vy * delta; asteroid.spin += delta * 2; if (!asteroid.hit && distance(asteroid, player) < asteroid.radius + player.radius && player.dashTime <= 0 && state.shieldTime <= 0) { asteroid.hit = true; this.hurt(Math.max(1, Math.ceil(player.hp * .33))); this.burst(player.x, player.y, '#ffb073', 25); this.label(player.x, player.y - 25, '-33% VIDA ATUAL', '#ffb073'); } if (asteroid.x < -100 || asteroid.x > this.renderer.width + 100) entities.asteroids.splice(index, 1); }
-    if (state.healTimer <= 0) { entities.heals.push({ x: random(35, Math.max(36, this.renderer.width - 35)), y: random(110, Math.max(111, this.renderer.height - 35)), life: 17, radius: 11 }); state.healTimer = random(16, 24); this.label(this.renderer.width / 2, this.renderer.height * .2, '+ CÁPSULA DE CURA DISPONÍVEL', '#79ffb4'); }
+    if (state.healTimer <= 0) { entities.heals.push({ x: random(42, Math.max(43, this.renderer.width - 42)), y: random(125, Math.max(126, this.renderer.height - 42)), life: 22, radius: 16, phase: random(0, TAU) }); state.healTimer = random(16, 24); this.label(this.renderer.width / 2, this.renderer.height * .2, '✚ CÁPSULA DE REPARO · +35 VIDA', '#8aff9e'); }
     for (let index = entities.heals.length - 1; index >= 0; index -= 1) { const heal = entities.heals[index]; heal.life -= delta; if (distance(heal, player) < heal.radius + player.radius) { const amount = Math.min(35, player.maxHp - player.hp); player.hp += amount; this.label(player.x, player.y - 24, `+${Math.round(amount)} VIDA`, '#6dffc1'); this.burst(heal.x, heal.y, '#5dffab', 18); entities.heals.splice(index, 1); } else if (heal.life <= 0) entities.heals.splice(index, 1); }
     for (let index = entities.rings.length - 1; index >= 0; index -= 1) { entities.rings[index].life -= delta; if (entities.rings[index].life <= 0) entities.rings.splice(index, 1); }
   }
@@ -167,7 +167,7 @@ export class Game {
     state.shieldCooldown = Math.max(0, state.shieldCooldown - delta); state.shieldTime = Math.max(0, state.shieldTime - delta); state.chargeTimer = Math.max(0, state.chargeTimer - delta);
     if (state.powers.shield && state.shieldTime <= 0 && state.shieldCooldown <= 0) { state.shieldTime = 2.4 + .8 * state.powers.shield; state.shieldCooldown = Math.max(7, 16 - 2 * state.powers.shield); this.burst(player.x, player.y, '#81ffca', 18, .7); }
     if (state.companions.length) this.updateCompanions(delta);
-    if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ x: player.x, y: player.y, maxRadius: radius, life: .65, duration: .65, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
+    if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ kind: 'nova', x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
     if (state.powers.singularity) {
       state.singularityTimer -= delta;
       if (state.singularityTimer <= 0) {
@@ -182,7 +182,7 @@ export class Game {
           enemy.hp -= player.damage * (.7 + state.powers.singularity * .2);
         }
         this.burst(player.x, player.y, '#ba8cff', 44, 1.4);
-        entities.rings.push({ x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#b78bff' });
+        entities.rings.push({ kind: 'singularity', x: player.x, y: player.y, maxRadius: radius, life: 1.05, duration: 1.05, color: '#b78bff' });
         state.singularityTimer = Math.max(4.2, 8 - state.powers.singularity * .7);
         this.audio.play(125, .38, 'triangle', .09);
       }
@@ -196,7 +196,7 @@ export class Game {
           enemy.hp -= player.damage * (1.15 + state.powers.ionStorm * .28);
           enemy.slow = Math.max(enemy.slow, .35);
           this.burst(enemy.x, enemy.y, '#a9f9ff', 14, 1.1);
-          entities.rings.push({ x: enemy.x, y: enemy.y, maxRadius: enemy.radius + 28, life: .35, duration: .35, color: '#85f2ff' });
+          entities.rings.push({ kind: 'ion', x: enemy.x, y: enemy.y, originX: player.x, originY: player.y, maxRadius: enemy.radius + 28, life: .5, duration: .5, color: '#85f2ff' });
         }
         this.label(player.x, player.y - 42, 'TEMPESTADE IÔNICA', '#a9f9ff');
         state.ionStormTimer = Math.max(2.4, 5 - state.powers.ionStorm * .45);
@@ -347,10 +347,10 @@ export class Game {
     for (let index = 0; index < player.shots; index += 1) {
       const angle = center + (index - (player.shots - 1) / 2) * .16;
       const speed = player.projectileSpeed;
-      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow });
+      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow, overdrive: state.powers.overdrive > 0 });
     }
     this.audio.play(450, .055, 'triangle', .016);
-    this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, '#70f5ff', 3, .35);
+    this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, state.powers.overdrive ? '#ffbd58' : '#70f5ff', state.powers.overdrive ? 6 : 3, state.powers.overdrive ? .7 : .35);
   }
 
   companionShoot(companion) {
@@ -363,7 +363,7 @@ export class Game {
     const level = companion.level;
     const speed = 570 + Math.min(level - 1, 5) * 22;
     const damage = player.damage * Math.min(.9, .42 + (level - 1) * .09) * companion.damageMultiplier;
-    state.entities.bullets.push({ x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1.2, radius: 4, damage, pierce: 0, hit: new Set(), critical: false, slow: player.slow, companionShot: true });
+    state.entities.bullets.push({ x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1.2, radius: 4, damage, pierce: companion.shotPierce ?? 0, hit: new Set(), critical: false, slow: Math.min(.7, player.slow + (companion.slowBonus ?? 0)), companionShot: true, color: companion.color });
   }
 
   updateBullets(delta) {
@@ -607,32 +607,43 @@ export class Game {
       if (target) {
         target.level += 1;
       } else if (power.addNew || !state.companions.length) this.addCompanion();
+      this.label(player.x, player.y - 38, target ? `${target.name} · NÍVEL ${target.level}` : 'REFORÇO DE COMPANHEIRO', '#8dfff0');
     }
     if (power.key === 'shield') {
       player.rate = Math.min(1.35, player.rate * 1.1);
       state.shieldTime = 4;
       state.shieldCooldown = 0;
+      this.burst(player.x, player.y, '#80ffc5', 28, 1.2);
+      this.label(player.x, player.y - 38, 'ESCUDO REATIVO ATIVO', '#a9ffd1');
     }
-    if (power.key === 'charged') state.chargeTimer = 0;
-    if (power.key === 'aimbot') player.rate = Math.min(1.35, player.rate * 1.08);
+    if (power.key === 'charged') { state.chargeTimer = 0; this.burst(player.x, player.y, '#ffd174', 22, 1); this.label(player.x, player.y - 38, 'TIRO CARREGADO · PRONTO', '#ffe19c'); }
+    if (power.key === 'aimbot') { player.rate = Math.min(1.35, player.rate * 1.08); this.burst(player.x, player.y, '#ffd45c', 18, .8); this.label(player.x, player.y - 38, 'MIRA AUTOMÁTICA ATIVADA', '#ffe28a'); }
     if (power.key === 'nova') {
       player.maxHp = Math.max(60, player.maxHp - 8);
       player.hp = Math.min(player.hp, player.maxHp);
       state.novaTimer = 1;
+      this.burst(player.x, player.y, '#c498ff', 36, 1.2);
+      this.label(player.x, player.y - 38, 'PULSO GRAVITACIONAL', '#d3b4ff');
     }
     if (power.key === 'overdrive') {
       player.rate = Math.max(.13, player.rate * .84);
       player.damage *= 1.12;
       player.move = Math.max(120, player.move * .94);
+      this.burst(player.x, player.y, '#ffc05b', 30, 1.1);
+      this.label(player.x, player.y - 38, 'SOBRECARGA · POTÊNCIA MÁXIMA', '#ffd18a');
     }
     if (power.key === 'singularity') {
       player.maxHp = Math.max(60, player.maxHp - 5);
       player.hp = Math.min(player.hp, player.maxHp);
       state.singularityTimer = 1.2;
+      this.burst(player.x, player.y, '#bb8bff', 32, 1.1);
+      this.label(player.x, player.y - 38, 'SINGULARIDADE ATIVADA', '#d3aeff');
     }
     if (power.key === 'ionStorm') {
       player.armor = Math.max(-.3, player.armor - .04);
       state.ionStormTimer = .8;
+      this.burst(player.x, player.y, '#91f6ff', 24, 1);
+      this.label(player.x, player.y - 38, 'TEMPESTADE IÔNICA', '#adf8ff');
     }
   }
 

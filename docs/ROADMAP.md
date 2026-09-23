@@ -22,7 +22,7 @@ Neon Rift é um roguelite de arena para navegador. O ciclo central deve ser: sob
 ## Fatia 2 — identidade das builds e decisões de esquadrão
 
 - Classificar melhorias por função (dano, controle, mobilidade, defesa e esquadrão) e evitar ofertas redundantes.
-- Criar especializações opcionais para cada companheiro, além do crescimento de dano/cadência e interceptação já existente.
+- **Parcialmente implementado:** Vaga-lume desacelera inimigos, Lança atravessa um alvo e Égide intercepta projéteis; próximos passos são escolhas de especialização dentro da run.
 - Mostrar sinergias da build no HUD e no resumo de fim de partida.
 - Afinar padrões dos chefes para que cada um teste uma habilidade diferente, com telegráficos claros.
 
