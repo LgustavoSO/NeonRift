@@ -27,6 +27,7 @@ export class Renderer {
   draw(state, pointer, bestScore, now) {
     const context = this.context;
     const { width, height } = this;
+    this.canvas.style.cursor = pointer.active && state.mode === 'playing' ? 'none' : 'crosshair';
     context.fillStyle = '#050b17';
     context.fillRect(0, 0, width, height);
     context.save();
@@ -34,6 +35,7 @@ export class Renderer {
     this.drawBackdrop(context, state, pointer, now);
     this.drawWorld(context, state, pointer, now);
     context.restore();
+    if (pointer.active && state.mode === 'playing') this.drawReticle(context, pointer, now);
     if (state.flash > 0) { context.fillStyle = `rgba(255,60,100,${state.flash * .42})`; context.fillRect(0, 0, width, height); }
     if (state.mode !== 'menu') this.drawHud(context, state, bestScore, width);
   }
@@ -52,14 +54,26 @@ export class Renderer {
       context.beginPath(); context.arc(star.x, star.y, star.radius, 0, TAU); context.fill();
     }
     context.globalAlpha = 1;
-    if (pointer.active && state.mode === 'playing') {
-      context.strokeStyle = '#67ecff99'; context.lineWidth = 1.5;
-      context.beginPath(); context.arc(pointer.x, pointer.y, 11, 0, TAU);
-      context.moveTo(pointer.x - 18, pointer.y); context.lineTo(pointer.x - 7, pointer.y);
-      context.moveTo(pointer.x + 7, pointer.y); context.lineTo(pointer.x + 18, pointer.y);
-      context.moveTo(pointer.x, pointer.y - 18); context.lineTo(pointer.x, pointer.y - 7);
-      context.moveTo(pointer.x, pointer.y + 7); context.lineTo(pointer.x, pointer.y + 18); context.stroke();
-    }
+  }
+
+  drawReticle(context, pointer, now) {
+    context.save();
+    context.translate(pointer.x, pointer.y);
+    context.strokeStyle = '#75f4ff';
+    context.fillStyle = '#d8ffff';
+    context.lineWidth = 1.4;
+    context.shadowBlur = 9;
+    context.shadowColor = '#42eaff';
+    const pulse = Math.sin(now * .009) * .8;
+    context.beginPath();
+    context.arc(0, 0, 8 + pulse, 0, TAU);
+    context.moveTo(-16, 0); context.lineTo(-7, 0);
+    context.moveTo(16, 0); context.lineTo(7, 0);
+    context.moveTo(0, -16); context.lineTo(0, -7);
+    context.moveTo(0, 16); context.lineTo(0, 7);
+    context.stroke();
+    context.beginPath(); context.arc(0, 0, 1.5, 0, TAU); context.fill();
+    context.restore();
   }
 
   drawWorld(context, state, pointer, now) {
@@ -90,21 +104,89 @@ export class Renderer {
   drawEnemyBullet(context, bullet) { context.shadowBlur = 17; context.shadowColor = '#ff59b3'; context.fillStyle = '#ff8bd4'; context.beginPath(); context.arc(bullet.x, bullet.y, bullet.radius, 0, TAU); context.fill(); context.shadowBlur = 0; }
 
   drawEnemy(context, enemy, now) {
-    context.save(); context.translate(enemy.x, enemy.y); context.rotate(enemy.pulse * .18); context.shadowBlur = 22; context.shadowColor = enemy.color; context.strokeStyle = enemy.color; context.lineWidth = 2.5; context.fillStyle = '#15203b'; hexagon(context, 0, 0, enemy.radius, Math.PI / 6); context.fill(); context.stroke(); context.fillStyle = enemy.color; hexagon(context, 0, 0, enemy.type === 'boss' ? 15 : enemy.radius * .38, Math.PI / 6); context.fill(); if (enemy.type === 'boss') { context.strokeStyle = '#ffbadf'; context.lineWidth = 3; hexagon(context, 0, 0, enemy.radius + 8, now * .0008); context.stroke(); } context.restore();
-    if (enemy.hp < enemy.maxHp || enemy.type === 'boss') { context.fillStyle = '#0009'; context.fillRect(enemy.x - enemy.radius, enemy.y - enemy.radius - 14, enemy.radius * 2, 4); context.fillStyle = enemy.color; context.fillRect(enemy.x - enemy.radius, enemy.y - enemy.radius - 14, enemy.radius * 2 * clamp(enemy.hp / enemy.maxHp, 0, 1), 4); }
+    const isBoss = enemy.type === 'boss';
+    const isMiniBoss = enemy.type === 'miniboss';
+    context.save(); context.translate(enemy.x, enemy.y); context.rotate(enemy.pulse * .18); context.shadowBlur = enemy.elite || isBoss || isMiniBoss ? 25 : 22; context.shadowColor = enemy.elite ? '#ffd36a' : enemy.color; context.strokeStyle = enemy.elite ? '#ffe08a' : enemy.color; context.lineWidth = enemy.elite ? 3 : 2.5; context.fillStyle = '#15203b'; hexagon(context, 0, 0, enemy.radius, Math.PI / 6); context.fill(); context.stroke(); context.fillStyle = enemy.color; hexagon(context, 0, 0, isBoss ? 17 : isMiniBoss ? 12 : enemy.radius * .38, Math.PI / 6); context.fill(); if (isBoss || isMiniBoss || enemy.elite) { context.strokeStyle = isBoss ? '#ffbadf' : enemy.elite ? '#fff0ad' : '#ffe0a8'; context.lineWidth = isBoss ? 3 : 2; hexagon(context, 0, 0, enemy.radius + (isBoss ? 8 : 5), now * (isBoss ? .0008 : .0012)); context.stroke(); } context.restore();
+    if (enemy.hp < enemy.maxHp || isBoss || isMiniBoss) {
+      const barY = enemy.y - enemy.radius - (isBoss ? 24 : 15);
+      if (isBoss || isMiniBoss) { context.textAlign = 'center'; context.font = `bold ${isBoss ? 12 : 10}px system-ui`; context.fillStyle = enemy.color; context.fillText(isBoss ? enemy.bossVariant.name : enemy.miniVariant.name, enemy.x, barY - 5); }
+      context.fillStyle = '#0009'; context.fillRect(enemy.x - enemy.radius, barY, enemy.radius * 2, isBoss ? 6 : 4); context.fillStyle = enemy.elite ? '#ffe08a' : enemy.color; context.fillRect(enemy.x - enemy.radius, barY, enemy.radius * 2 * clamp(enemy.hp / enemy.maxHp, 0, 1), isBoss ? 6 : 4);
+    }
   }
 
   drawPlayer(context, state, now) {
     const { player } = state;
-    context.save(); context.translate(player.x, player.y); context.rotate(player.angle + Math.PI / 2); if (player.invulnerable > 0 && Math.floor(now / 65) % 2) context.globalAlpha = .4; context.shadowBlur = 25; context.shadowColor = '#50eaff'; context.fillStyle = '#111d38'; context.strokeStyle = '#8af5ff'; context.lineWidth = 2.5; context.beginPath(); context.moveTo(0, -19); context.lineTo(13, 12); context.lineTo(0, 7); context.lineTo(-13, 12); context.closePath(); context.fill(); context.stroke(); context.fillStyle = player.dashTime > 0 ? '#fff' : '#42d9ff'; context.beginPath(); context.moveTo(-6, 12); context.lineTo(0, 28); context.lineTo(6, 12); context.fill(); context.restore();
+    context.save(); context.translate(player.x, player.y); context.rotate(player.angle + Math.PI / 2); if (player.invulnerable > 0 && Math.floor(now / 65) % 2) context.globalAlpha = .4; context.shadowBlur = 25; context.shadowColor = '#50eaff'; context.fillStyle = '#111d38'; context.strokeStyle = '#8af5ff'; context.lineWidth = 2.5; context.beginPath(); context.moveTo(0, -19); context.lineTo(13, 12); context.lineTo(0, 7); context.lineTo(-13, 12); context.closePath(); context.fill(); context.stroke(); const thrusterColor = player.dashTime > 0 ? '#ffffff' : player.dash <= 0 ? '#ffd34f' : '#42d9ff'; context.fillStyle = thrusterColor; context.shadowColor = thrusterColor; context.shadowBlur = player.dash <= 0 ? 22 : 15; context.beginPath(); context.moveTo(-6, 12); context.lineTo(0, player.dashTime > 0 ? 35 : player.dash <= 0 ? 31 + Math.sin(now * .012) * 2 : 28); context.lineTo(6, 12); context.fill(); context.restore();
     if (state.shieldTime > 0) { context.strokeStyle = '#8cffc9'; context.shadowBlur = 25; context.shadowColor = '#76ffbd'; context.lineWidth = 3; context.beginPath(); context.arc(player.x, player.y, 31 + Math.sin(now * .01) * 2, 0, TAU); context.stroke(); context.shadowBlur = 0; }
     for (let i = 0; i < Math.min(4, state.powers.companion); i += 1) { const angle = state.time * 1.6 + i * TAU / Math.min(4, state.powers.companion); context.fillStyle = '#b4b6ff'; context.shadowBlur = 16; context.shadowColor = '#949aff'; hexagon(context, player.x + Math.cos(angle) * 44, player.y + Math.sin(angle) * 44, 7, now * .002); context.fill(); context.shadowBlur = 0; }
   }
 
   drawHud(context, state, bestScore, width) {
-    const { player } = state; const padding = width < 600 ? 15 : 25;
-    context.fillStyle = '#081426cd'; context.fillRect(padding, padding, 220, 91); context.strokeStyle = '#407590'; context.strokeRect(padding, padding, 220, 91); context.fillStyle = '#e5f9ff'; context.font = 'bold 15px system-ui'; context.textAlign = 'left'; context.fillText(`ONDA ${state.wave}   ·   NÍVEL ${state.level}`, padding + 12, padding + 22); context.fillStyle = '#294258'; context.fillRect(padding + 12, padding + 34, 194, 13); context.fillStyle = player.hp / player.maxHp < .3 ? '#ff5877' : '#4df8a8'; context.fillRect(padding + 12, padding + 34, 194 * clamp(player.hp / player.maxHp, 0, 1), 13); context.fillStyle = '#294258'; context.fillRect(padding + 12, padding + 57, 194, 7); context.fillStyle = '#6ee6ff'; context.fillRect(padding + 12, padding + 57, 194 * clamp(state.xp / state.nextXp, 0, 1), 7); context.fillStyle = '#a8c5d6'; context.font = '11px system-ui'; context.fillText(`VIDA ${Math.max(0, Math.ceil(player.hp))}/${player.maxHp}`, padding + 12, padding + 82);
-    context.textAlign = 'right'; context.font = 'bold 18px system-ui'; context.fillStyle = '#e8faff'; context.fillText(`${state.score} PTS`, width - padding, padding + 22); context.font = '12px system-ui'; context.fillStyle = '#83aec8'; context.fillText(`RECORDE ${bestScore}`, width - padding, padding + 42); context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 62); const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${key} ×${value}`).join('  '); context.fillStyle = '#d5b4ff'; context.fillText(activePowers, width - padding, padding + 82); if (state.powers.charged) { context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb'; context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 101); }
+    const { player } = state;
+    const padding = width < 600 ? 13 : 25;
+    const panelWidth = width < 600 ? 224 : 238;
+    const panelHeight = 139;
+    context.fillStyle = '#081426dc';
+    context.fillRect(padding, padding, panelWidth, panelHeight);
+    context.strokeStyle = '#407590';
+    context.strokeRect(padding, padding, panelWidth, panelHeight);
+    context.textAlign = 'left';
+    context.fillStyle = '#e5f9ff';
+    context.font = 'bold 14px system-ui';
+    context.fillText(`ONDA ${state.wave}   ·   NÍVEL ${state.level}`, padding + 11, padding + 20);
+    context.fillStyle = '#294258';
+    context.fillRect(padding + 11, padding + 28, panelWidth - 22, 11);
+    context.fillStyle = player.hp / player.maxHp < .3 ? '#ff5877' : '#4df8a8';
+    context.fillRect(padding + 11, padding + 28, (panelWidth - 22) * clamp(player.hp / player.maxHp, 0, 1), 11);
+    context.fillStyle = '#294258';
+    context.fillRect(padding + 11, padding + 47, panelWidth - 22, 6);
+    context.fillStyle = '#6ee6ff';
+    context.fillRect(padding + 11, padding + 47, (panelWidth - 22) * clamp(state.xp / state.nextXp, 0, 1), 6);
+    context.fillStyle = '#a8c5d6';
+    context.font = '10px system-ui';
+    context.fillText(`CASCO ${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp}  ·  XP ${state.xp}/${state.nextXp}`, padding + 11, padding + 68);
+    context.strokeStyle = '#40759080';
+    context.beginPath(); context.moveTo(padding + 11, padding + 77); context.lineTo(padding + panelWidth - 11, padding + 77); context.stroke();
+
+    const stats = [
+      { label: 'DANO', value: Math.round(player.damage) },
+      { label: 'CADÊNCIA', value: `${(1 / player.rate).toFixed(1)}/s` },
+      { label: 'VELOCIDADE', value: `${Math.round(player.move)}` },
+      { label: 'CRÍTICO', value: `${Math.round(player.crit * 100)}%` },
+    ];
+    const columnWidth = (panelWidth - 22) / 2;
+    stats.forEach((stat, index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const x = padding + 11 + column * columnWidth;
+      const y = padding + 95 + row * 20;
+      context.fillStyle = '#82a4ba';
+      context.font = '9px system-ui';
+      context.fillText(stat.label, x, y);
+      context.fillStyle = '#e8faff';
+      context.font = 'bold 11px system-ui';
+      context.fillText(String(stat.value), x + columnWidth - 34, y);
+    });
+
+    context.textAlign = 'right';
+    context.font = 'bold 18px system-ui';
+    context.fillStyle = '#e8faff';
+    context.fillText(`${state.score} PTS`, width - padding, padding + 21);
+    context.font = '11px system-ui';
+    context.fillStyle = '#83aec8';
+    context.fillText(`RECORDE ${bestScore}`, width - padding, padding + 40);
+    context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
+    context.font = 'bold 12px system-ui';
+    context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 60);
+    const powerIcons = { companion: '🤖', shield: '🛡', charged: '☄', nova: '🌌' };
+    const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${powerIcons[key]}×${value}`).join('  ');
+    context.fillStyle = '#d5b4ff';
+    context.font = '12px system-ui';
+    context.fillText(activePowers, width - padding, padding + 80);
+    if (state.powers.charged) {
+      context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb';
+      context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 99);
+    }
     if (state.mode === 'paused') { context.fillStyle = '#020914b8'; context.fillRect(0, 0, width, this.height); context.textAlign = 'center'; context.fillStyle = '#fff'; context.font = 'bold 40px system-ui'; context.fillText('PAUSADO', width / 2, this.height / 2); context.font = '16px system-ui'; context.fillText('Pressione P para continuar', width / 2, this.height / 2 + 30); }
   }
 }

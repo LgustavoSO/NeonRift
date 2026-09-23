@@ -4,6 +4,7 @@ export class InputController {
   joystick = { x: 0, y: 0 };
   onDash = () => {};
   onChargedShot = () => {};
+  onPointerMove = () => {};
   onPause = () => {};
   onChoice = () => {};
 
@@ -14,9 +15,9 @@ export class InputController {
     addEventListener('keydown', event => this.keyDown(event));
     addEventListener('keyup', event => this.keys.delete(event.key.toLowerCase()));
     addEventListener('blur', () => { this.keys.clear(); this.joystick = { x: 0, y: 0 }; this.resetJoystick(); });
-    canvas.addEventListener('pointermove', event => { this.pointer = { x: event.clientX, y: event.clientY, active: true }; });
+    canvas.addEventListener('pointermove', event => this.updatePointer(event));
     canvas.addEventListener('pointerdown', event => {
-      this.pointer = { x: event.clientX, y: event.clientY, active: true };
+      this.updatePointer(event);
       if (event.button === 0 || event.pointerType === 'touch') this.onChargedShot();
     });
     dashButton.addEventListener('click', () => this.onDash());
@@ -24,6 +25,11 @@ export class InputController {
     joystick.addEventListener('pointermove', event => { if (joystick.hasPointerCapture(event.pointerId)) this.moveJoystick(event); });
     joystick.addEventListener('pointerup', () => this.resetJoystick());
     joystick.addEventListener('pointercancel', () => this.resetJoystick());
+  }
+
+  updatePointer(event) {
+    this.pointer = { x: event.clientX, y: event.clientY, active: true };
+    this.onPointerMove(this.pointer);
   }
 
   keyDown(event) {

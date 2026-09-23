@@ -28,10 +28,11 @@ kbd { padding: 5px 9px; border: 1px solid #547399; border-bottom-width: 3px; bor
 .choice__icon { margin-bottom: 10px; font-size: 29px; }
 .choice__name { font-size: 18px; font-weight: 800; }
 .choice__description { margin-top: 8px; color: #abc8da; font-size: 13px; line-height: 1.4; }
+.choice__tradeoff { margin-top: 10px; padding-top: 8px; border-top: 1px solid #ffb36e55; color: #ffc28f; font-size: 12px; line-height: 1.35; }
 .touch-controls { position: fixed; inset: auto 0 20px; z-index: 3; display: none; justify-content: space-between; padding: 0 25px; pointer-events: none; }
 .touch-controls button { pointer-events: auto; }
 .touch-controls__dash { width: 78px; height: 78px; border: 1px solid var(--cyan); border-radius: 50%; background: #1885eeb8; color: #fff; font-weight: 900; }
 .joystick { width: 110px; height: 110px; border: 2px solid #8cf2ff60; border-radius: 50%; background: #173a5980; position: relative; pointer-events: auto; touch-action: none; }
 .joystick__nub { position: absolute; left: 34px; top: 34px; width: 40px; height: 40px; border-radius: 50%; background: #83eaffaa; }
-@media (pointer: coarse) { .touch-controls { display: flex; } .choice-grid { grid-template-columns: 1fr; } .choice { min-height: 95px; } .choice__icon { margin: 0; } }
+@media (pointer: coarse) { .touch-controls { display: flex; } .choice-grid { grid-template-columns: 1fr; } .choice { min-height: 95px; } .choice:has(.choice__tradeoff) { min-height: 125px; } .choice__icon { margin: 0; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }

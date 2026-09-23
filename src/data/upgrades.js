@@ -13,10 +13,10 @@ export const UPGRADES = [
 ];
 
 export const POWERS = [
-  { icon: '🤖', name: 'Companheiro de combate', description: 'Uma nave aliada acompanha você e atira automaticamente. Escolher de novo adiciona outra.', key: 'companion' },
-  { icon: '🛡️', name: 'Escudo reativo', description: 'Bloqueia dano automaticamente por alguns segundos; depois recarrega.', key: 'shield' },
+  { icon: '🤖', name: 'Companheiro de combate', description: 'Uma nave aliada acompanha você e atira automaticamente. Escolher de novo adiciona outra.', tradeoff: 'Cada companheiro reduz a velocidade da nave em 5%.', key: 'companion' },
+  { icon: '🛡️', name: 'Escudo reativo', description: 'Bloqueia dano automaticamente por alguns segundos; depois recarrega.', tradeoff: 'A recarga do canhão fica 10% mais lenta por nível.', key: 'shield' },
   { icon: '☄️', name: 'Tiro carregado', description: 'A cada poucos segundos, dispara um projétil gigante que atravessa vários inimigos.', key: 'charged' },
-  { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', key: 'nova' },
+  { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'O campo consome 8 pontos de vida máxima por nível.', key: 'nova' },
 ];
 
 export function pickChoices(source, count = 3) {

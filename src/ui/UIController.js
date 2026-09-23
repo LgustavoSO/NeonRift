@@ -43,7 +43,7 @@ export class UIController {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'choice';
-      button.innerHTML = `<span class="choice__icon">${choice.icon}</span><span class="choice__name">${index + 1}. ${choice.name}</span><span class="choice__description">${choice.description}</span>`;
+      button.innerHTML = `<span class="choice__icon">${choice.icon}</span><span class="choice__name">${index + 1}. ${choice.name}</span><span class="choice__description">${choice.description}</span>${choice.tradeoff ? `<span class="choice__tradeoff">${choice.tradeoff}</span>` : ''}`;
       button.addEventListener('click', () => onChoice(choice));
       this.choiceGrid.append(button);
     });
