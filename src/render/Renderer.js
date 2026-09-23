@@ -158,15 +158,32 @@ export class Renderer {
     context.translate(companion.x, companion.y);
     context.rotate(companion.angle + Math.PI / 2);
     context.globalAlpha = disabled ? .58 : 1;
-    context.shadowBlur = companion.hitFlash > 0 ? 25 : 17;
-    context.shadowColor = companion.hitFlash > 0 ? '#ffae6b' : '#bda4ff';
-    context.fillStyle = disabled ? '#443b43' : '#211e45';
-    context.strokeStyle = companion.hitFlash > 0 ? '#ffc17c' : '#d3c8ff';
-    context.lineWidth = 1.8;
+    if (companion.intercepting) {
+      context.strokeStyle = '#8dfff0aa'; context.lineWidth = 1.5; context.setLineDash([]); context.beginPath(); context.ellipse(0, 0, 21, 15, 0, 0, TAU); context.stroke();
+    }
+    context.shadowBlur = companion.hitFlash > 0 ? 25 : 19;
+    context.shadowColor = companion.hitFlash > 0 ? '#ffae6b' : '#4fffe0';
+    context.fillStyle = disabled ? '#443b43' : '#103440';
+    context.strokeStyle = companion.hitFlash > 0 ? '#ffc17c' : '#a6fff1';
+    context.lineWidth = 2;
     context.beginPath();
-    context.moveTo(0, -11); context.quadraticCurveTo(9, -8, 11, 0); context.quadraticCurveTo(8, 7, 1, 9); context.lineTo(0, 5); context.lineTo(-1, 9); context.quadraticCurveTo(-8, 7, -11, 0); context.quadraticCurveTo(-9, -8, 0, -11); context.closePath();
+    context.moveTo(0, -13);
+    context.quadraticCurveTo(8, -9, 17, 3);
+    context.quadraticCurveTo(10, 2, 5, 7);
+    context.lineTo(1, 5);
+    context.quadraticCurveTo(0, 9, -1, 5);
+    context.lineTo(-5, 7);
+    context.quadraticCurveTo(-10, 2, -17, 3);
+    context.quadraticCurveTo(-8, -9, 0, -13);
+    context.closePath();
     context.fill(); context.stroke();
-    if (!disabled) { context.fillStyle = '#8cf8ff'; context.shadowColor = '#82efff'; context.shadowBlur = 11; context.beginPath(); context.ellipse(0, -2, 2.2, 4, 0, 0, TAU); context.fill(); }
+    context.shadowBlur = 0;
+    context.strokeStyle = disabled ? '#9d7770' : '#46e9d4'; context.lineWidth = 1.1;
+    context.beginPath(); context.moveTo(-12, 2); context.quadraticCurveTo(-5, -2, 0, 0); context.quadraticCurveTo(5, -2, 12, 2); context.stroke();
+    context.fillStyle = disabled ? '#a96c58' : '#ffdc82';
+    context.shadowColor = disabled ? '#ff9368' : '#ffdc82'; context.shadowBlur = disabled ? 5 : 12;
+    context.beginPath(); context.ellipse(-7, 5, 2, 3.4, -.3, 0, TAU); context.ellipse(7, 5, 2, 3.4, .3, 0, TAU); context.fill();
+    if (!disabled) { context.fillStyle = '#eaffff'; context.shadowColor = '#8affee'; context.shadowBlur = 13; context.beginPath(); context.ellipse(0, -4, 2.8, 5.5, 0, 0, TAU); context.fill(); }
     context.restore();
     context.textAlign = 'center';
     context.font = 'bold 9px system-ui';

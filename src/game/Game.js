@@ -483,10 +483,8 @@ export class Game {
     const state = this.state;
     state.xp -= state.nextXp;
     state.level += 1;
-    const previousMaxHp = state.player.maxHp;
-    state.player.maxHp = Math.ceil(previousMaxHp * 1.5);
-    const hpBonus = state.player.maxHp - previousMaxHp;
-    state.player.hp = Math.min(state.player.maxHp, state.player.hp + hpBonus);
+    const hpRestored = Math.min(Math.ceil(state.player.maxHp * .5), state.player.maxHp - state.player.hp);
+    state.player.hp += hpRestored;
     state.nextXp = Math.ceil(state.nextXp * 1.28 + 4);
     const count = Math.min(40, 9 + state.level * 2);
     for (let index = 0; index < count; index += 1) this.spawn(state.level >= 4 && index % 5 === 0 ? 'tank' : index % 3 === 0 ? 'runner' : 'grunt');
@@ -495,7 +493,7 @@ export class Game {
       this.spawn('miniboss', { variant });
       this.label(this.renderer.width / 2, this.renderer.height * .24, `⚠ MINI-CHEFE · ${variant.name}`, variant.color);
     }
-    this.label(state.player.x, state.player.y - 40, `CASCO +50% · +${hpBonus} VIDA`, '#80ffc2');
+    this.label(state.player.x, state.player.y - 40, `REPARO 50% DO CASCO · +${hpRestored} VIDA`, '#80ffc2');
     this.label(this.renderer.width / 2, this.renderer.height * .32, `⚠ HORDA DO NÍVEL ${state.level}`, '#ffba74');
     state.mode = 'choice';
     const choices = pickChoices(UPGRADES, 3);
