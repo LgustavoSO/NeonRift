@@ -168,7 +168,10 @@ export class Renderer {
     context.fill(); context.stroke();
     if (!disabled) { context.fillStyle = '#8cf8ff'; context.shadowColor = '#82efff'; context.shadowBlur = 11; context.beginPath(); context.ellipse(0, -2, 2.2, 4, 0, 0, TAU); context.fill(); }
     context.restore();
-    if (disabled) { context.textAlign = 'center'; context.font = 'bold 9px system-ui'; context.fillStyle = '#ffc17c'; context.fillText(`${companion.disabledTimer.toFixed(1)}s`, companion.x, companion.y - 15); }
+    context.textAlign = 'center';
+    context.font = 'bold 9px system-ui';
+    context.fillStyle = disabled ? '#ffc17c' : '#d6caff';
+    context.fillText(disabled ? `${companion.disabledTimer.toFixed(1)}s` : `L${companion.level}`, companion.x, companion.y - 15);
   }
 
   drawHud(context, state, bestScore, width) {
@@ -231,7 +234,8 @@ export class Renderer {
     context.font = 'bold 12px system-ui';
     context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 60);
     const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩' };
-    const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => key === 'companion' ? `🛸${state.companions.length} L${value}` : `${powerIcons[key]}×${value}`).join('  ');
+    const squadLevel = Math.max(0, ...state.companions.map(companion => companion.level));
+    const activePowers = Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => key === 'companion' ? `🛸${state.companions.length} · L${squadLevel}` : `${powerIcons[key]}×${value}`).join('  ');
     context.fillStyle = '#d5b4ff';
     context.font = '12px system-ui';
     context.fillText(activePowers, width - padding, padding + 80);

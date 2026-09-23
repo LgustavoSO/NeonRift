@@ -16,11 +16,11 @@ export const UPGRADES = [
 ];
 
 export const POWERS = [
-  { icon: '🤖', name: 'Companheiro de combate', description: 'Cada nível adiciona um drone (até 4) e melhora cadência e dano. No nível 3, eles interceptam projéteis.', tradeoff: 'Um drone atingido para de atirar por 2s. Cada nível reduz a velocidade da nave em 5%.', key: 'companion' },
+  { icon: '🤖', name: 'Companheiro de combate', description: 'Adiciona um drone ou abre a seleção para melhorar um companheiro específico. O nível 3 daquele drone libera interceptação.', tradeoff: 'Um drone atingido para de atirar por 2s. Cada escolha reduz a velocidade da nave em 5%.', key: 'companion' },
   { icon: '🛡️', name: 'Escudo reativo', description: 'Bloqueia dano automaticamente por alguns segundos; depois recarrega.', tradeoff: 'A recarga do canhão fica 10% mais lenta por nível.', key: 'shield' },
   { icon: '☄️', name: 'Tiro carregado', description: 'A cada poucos segundos, dispara um projétil gigante que atravessa vários inimigos.', key: 'charged' },
   { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'O campo consome 8 pontos de vida máxima por nível.', key: 'nova' },
-  { icon: '🎯', name: 'Mira automática', description: 'Trava no inimigo mais próximo e guia seus projéteis até ele.', tradeoff: 'O sistema de rastreamento reduz a cadência do canhão em 8% por nível.', key: 'aimbot' },
+  { icon: '🎯', name: 'Mira automática', description: 'A nave aponta para o inimigo mais próximo; os projéteis seguem em linha reta, sem teleguiamento.', tradeoff: 'O sistema de mira reduz a cadência do canhão em 8% por nível.', key: 'aimbot' },
   { icon: '⚡', name: 'Sobrecarga', description: 'Aumenta bastante a cadência e o dano da nave.', tradeoff: 'O motor perde 6% da velocidade por nível.', key: 'overdrive' },
   { icon: '🕳️', name: 'Singularidade', description: 'A cada poucos segundos, atrai inimigos próximos e os desacelera.', tradeoff: 'A onda gravitacional reduz a vida máxima em 5 por nível.', key: 'singularity' },
   { icon: '🌩️', name: 'Tempestade iônica', description: 'Raios atingem inimigos em sequência automaticamente.', tradeoff: 'A tempestade sobrecarrega o escudo: −4% de blindagem por nível.', key: 'ionStorm' },

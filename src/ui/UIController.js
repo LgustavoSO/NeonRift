@@ -8,6 +8,7 @@ export class UIController {
     this.choiceGrid = document.querySelector('#choice-grid');
     this.choiceEyebrow = document.querySelector('#choice-eyebrow');
     this.choiceTitle = document.querySelector('#choice-title');
+    this.choiceHint = this.choiceScreen.querySelector('.hint');
     this.choiceHandler = null;
     document.querySelector('#play-button').addEventListener('click', () => this.onStart?.());
     document.querySelector('#again-button').addEventListener('click', () => this.onStart?.());
@@ -37,7 +38,29 @@ export class UIController {
     this.choiceScreen.classList.remove('is-hidden');
   }
 
+  showCompanionUpgrade(state, onChoice) {
+    this.choiceEyebrow.textContent = `ESQUADRÃO · ${state.companions.length} DRONES`;
+    this.choiceTitle.textContent = 'Quem recebe a melhoria?';
+    const choices = state.companions.map((companion, index) => ({
+      icon: '🛸',
+      name: `Companheiro ${index + 1} · NÍVEL ${companion.level}`,
+      description: `Ele sobe para o nível ${companion.level + 1}; só este drone ganha mais dano e cadência. ${companion.level === 2 ? 'No nível 3, libera interceptação de projéteis.' : ''}`,
+      targetId: companion.id,
+    }));
+    if (state.companions.length < 4) {
+      choices.push({
+        icon: '➕',
+        name: 'Novo companheiro',
+        description: 'Adiciona um drone de nível 1 ao esquadrão, sem alterar os companheiros atuais.',
+        addNew: true,
+      });
+    }
+    this.renderChoices(choices, onChoice);
+    this.choiceScreen.classList.remove('is-hidden');
+  }
+
   renderChoices(choices, onChoice) {
+    this.choiceHint.textContent = choices.length <= 3 ? 'Teclas 1, 2 ou 3 também funcionam' : 'Clique em um companheiro para escolher onde aplicar a melhoria';
     this.choiceGrid.replaceChildren();
     choices.forEach((choice, index) => {
       const button = document.createElement('button');

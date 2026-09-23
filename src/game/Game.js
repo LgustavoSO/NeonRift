@@ -63,7 +63,7 @@ export class Game {
     requestAnimationFrame(nextTime => this.loop(nextTime));
   }
 
-  previewState() { return { mode: 'menu', time: this.now / 1000, shake: 0, flash: 0, powers: {}, chargeTimer: 0, entities: { bullets: [], enemyBullets: [], enemies: [], gems: [], heals: [], asteroids: [], rings: [], particles: [], floaters: [] }, player: { x: this.renderer.width / 2, y: this.renderer.height / 2, angle: 0, radius: 13, hp: 100, maxHp: 100, dash: 0, dashTime: 0, invulnerable: 0 }, wave: 0, level: 0, score: 0, xp: 0, nextXp: 1 }; }
+  previewState() { return { mode: 'menu', time: this.now / 1000, shake: 0, flash: 0, powers: {}, companions: [], chargeTimer: 0, shieldTime: 0, entities: { bullets: [], enemyBullets: [], enemies: [], gems: [], heals: [], asteroids: [], rings: [], particles: [], floaters: [] }, player: { x: this.renderer.width / 2, y: this.renderer.height / 2, angle: 0, radius: 13, hp: 100, maxHp: 100, dash: 0, dashTime: 0, invulnerable: 0 }, wave: 0, level: 0, score: 0, xp: 0, nextXp: 1 }; }
 
   update(delta) {
     const state = this.state;
@@ -162,8 +162,6 @@ export class Game {
     const state = this.state;
     const { player, entities, companions } = state;
     const count = companions.length;
-    const interceptEnabled = state.powers.companion >= 3;
-    const fireInterval = Math.max(.24, .82 * Math.pow(.86, state.powers.companion - 1));
     for (let index = 0; index < count; index += 1) {
       const companion = companions[index];
       companion.disabledTimer = Math.max(0, companion.disabledTimer - delta);
@@ -173,7 +171,7 @@ export class Game {
       const orbitRadius = 52 + index % 2 * 12;
       const homeX = player.x + Math.cos(companion.phase) * orbitRadius;
       const homeY = player.y + Math.sin(companion.phase) * orbitRadius;
-      const intercept = interceptEnabled && companion.disabledTimer <= 0 ? this.findProjectileIntercept(companion) : null;
+      const intercept = companion.level >= 3 && companion.disabledTimer <= 0 ? this.findProjectileIntercept(companion) : null;
       companion.intercepting = Boolean(intercept);
       const targetX = intercept?.x ?? homeX;
       const targetY = intercept?.y ?? homeY;
@@ -181,7 +179,7 @@ export class Game {
       companion.angle = Math.atan2(targetY - companion.y, targetX - companion.x);
       if (companion.disabledTimer <= 0 && entities.enemies.length && companion.shootTimer <= 0) {
         this.companionShoot(companion);
-        companion.shootTimer = fireInterval;
+        companion.shootTimer = Math.max(.24, .82 * Math.pow(.86, companion.level - 1));
       }
     }
   }
@@ -294,7 +292,7 @@ export class Game {
     for (let index = 0; index < player.shots; index += 1) {
       const angle = center + (index - (player.shots - 1) / 2) * .16;
       const speed = player.projectileSpeed;
-      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, target: state.powers.aimbot ? target : null, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow });
+      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow });
     }
     this.audio.play(450, .055, 'triangle', .016);
     this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, '#70f5ff', 3, .35);
@@ -307,7 +305,7 @@ export class Game {
     const target = state.entities.enemies.reduce((nearest, enemy) => !nearest || distance(origin, enemy) < distance(origin, nearest) ? enemy : nearest, null);
     if (!target) return;
     const angle = angleTo(origin, target);
-    const level = state.powers.companion;
+    const level = companion.level;
     const speed = 570 + Math.min(level - 1, 5) * 22;
     const damage = player.damage * Math.min(.9, .42 + (level - 1) * .09);
     state.entities.bullets.push({ x: origin.x, y: origin.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1.2, radius: 4, damage, pierce: 0, hit: new Set(), critical: false, slow: player.slow, companionShot: true });
@@ -317,15 +315,6 @@ export class Game {
     const state = this.state; const { bullets, enemies } = state.entities;
     for (let index = bullets.length - 1; index >= 0; index -= 1) {
       const bullet = bullets[index];
-      if (state.powers.aimbot && bullet.target) {
-        if (!enemies.includes(bullet.target)) bullet.target = this.nearestEnemy(bullet);
-        if (bullet.target) {
-          const angle = angleTo(bullet, bullet.target);
-          const speed = bullet.speed ?? Math.hypot(bullet.vx, bullet.vy);
-          bullet.vx = Math.cos(angle) * speed;
-          bullet.vy = Math.sin(angle) * speed;
-        }
-      }
       bullet.x += bullet.vx * delta; bullet.y += bullet.vy * delta; bullet.life -= delta;
       if (bullet.life <= 0 || bullet.x < -40 || bullet.x > this.renderer.width + 40 || bullet.y < -40 || bullet.y > this.renderer.height + 40) { bullets.splice(index, 1); continue; }
       let remove = false;
@@ -469,9 +458,7 @@ export class Game {
       bullet.x += bullet.vx * delta;
       bullet.y += bullet.vy * delta;
       bullet.life -= delta;
-      const interceptor = state.powers.companion >= 3
-        ? state.companions.find(companion => companion.disabledTimer <= 0 && distance(bullet, companion) < 9 + bullet.radius)
-        : null;
+      const interceptor = state.companions.find(companion => companion.level >= 3 && companion.disabledTimer <= 0 && distance(bullet, companion) < 9 + bullet.radius);
       if (interceptor) {
         interceptor.disabledTimer = 2;
         interceptor.hitFlash = .3;
@@ -518,8 +505,20 @@ export class Game {
 
   applyChoice(choice) {
     const state = this.state;
+    if (choice.key === 'companion' && state.companions.length) {
+      this.ui.showCompanionUpgrade(state, target => {
+        this.grantPower({ ...choice, ...target });
+        this.finishChoice();
+      });
+      return;
+    }
     if (choice.key) this.grantPower(choice);
     else choice.apply(state.player);
+    this.finishChoice();
+  }
+
+  finishChoice() {
+    const state = this.state;
     state.mode = 'playing';
     this.ui.showPlaying();
     this.audio.play(740, .22, 'triangle', .09);
@@ -535,9 +534,12 @@ export class Game {
     state.powers[power.key] += 1;
     if (power.key === 'companion') {
       player.move = Math.max(120, player.move * .95);
-      if (state.companions.length < 4) {
-        const phase = state.time * 1.25 + state.companions.length * TAU / (state.companions.length + 1);
-        state.companions.push({ x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
+      const target = state.companions.find(companion => companion.id === power.targetId);
+      if (target) {
+        target.level += 1;
+      } else if (power.addNew || !state.companions.length) {
+        const phase = state.time * 1.25 + state.companions.length * TAU / Math.max(1, state.companions.length + 1);
+        state.companions.push({ id: state.companionSequence++, level: 1, x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false });
       }
     }
     if (power.key === 'shield') {
@@ -572,12 +574,16 @@ export class Game {
     const state = this.state;
     state.mode = 'choice';
     this.ui.showBossReward(state, choice => {
-      this.grantPower(choice);
-      state.pendingBossRewards -= 1;
-      if (choice.key === 'nova') state.novaTimer = 2;
-      if (state.pendingBossRewards > 0) this.openBossReward();
-      else if (state.xp >= state.nextXp) this.levelUp();
-      else { state.mode = 'playing'; this.ui.showPlaying(); }
+      const grant = selected => {
+        this.grantPower(selected);
+        state.pendingBossRewards -= 1;
+        if (selected.key === 'nova') state.novaTimer = 2;
+        if (state.pendingBossRewards > 0) this.openBossReward();
+        else if (state.xp >= state.nextXp) this.levelUp();
+        else { state.mode = 'playing'; this.ui.showPlaying(); }
+      };
+      if (choice.key === 'companion' && state.companions.length) this.ui.showCompanionUpgrade(state, target => grant({ ...choice, ...target }));
+      else grant(choice);
     });
   }
 
@@ -588,7 +594,7 @@ export class Game {
     const target = state.powers.aimbot ? this.nearestEnemy(player) : null;
     const angle = target ? angleTo(player, target) : this.input.pointer.active ? Math.atan2(this.input.pointer.y - player.y, this.input.pointer.x - player.x) : player.angle;
     const speed = 590 * player.projectileSpeed / 710;
-    state.entities.bullets.push({ x: player.x + Math.cos(angle) * 20, y: player.y + Math.sin(angle) * 20, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, target, life: 1.8, radius: 14, damage: player.damage * (3 + state.powers.charged), pierce: 4 + state.powers.charged * 2, hit: new Set(), critical: true, slow: player.slow, charged: true });
+    state.entities.bullets.push({ x: player.x + Math.cos(angle) * 20, y: player.y + Math.sin(angle) * 20, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, life: 1.8, radius: 14, damage: player.damage * (3 + state.powers.charged), pierce: 4 + state.powers.charged * 2, hit: new Set(), critical: true, slow: player.slow, charged: true });
     state.chargeTimer = Math.max(2.8, 7 - state.powers.charged * .7);
     this.audio.play(150, .45, 'sawtooth', .1);
     this.burst(player.x, player.y, '#ffcf67', 26, 1);

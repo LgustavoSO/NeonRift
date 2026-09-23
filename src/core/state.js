@@ -21,6 +21,7 @@ export function createGameState(width, height) {
     powers: { companion: 0, shield: 0, charged: 0, nova: 0, aimbot: 0, overdrive: 0, singularity: 0, ionStorm: 0 },
     aimTarget: null,
     companions: [],
+    companionSequence: 0,
     shieldTime: 0,
     shieldCooldown: 0,
     chargeTimer: 0,
