@@ -2,10 +2,11 @@
 
 ## Correções e balanceamento
 
+- Ondas duram pelo menos 24s e avançam ao limpar o campo abaixo da meta; o limite é 36s. O intervalo de reagrupamento foi aumentado para 4s.
 - Escolhas só funcionam no estado correto, uma vez por tela; botões antigos não podem repetir uma recompensa, recrutar outro aliado ou reabrir uma partida encerrada.
 - Dano fatal interrompe o restante do frame. Cura e XP não são coletados depois da derrota; a tela final é emitida apenas uma vez.
 - Escudos automático e manual recarregam **após** a proteção terminar, eliminando invulnerabilidade contínua em ranks altos.
-- A pressão dos inimigos considera a variedade de poderes e o número de aliados, não cada nível comprado no Hangar. A redução de fluxo de inimigos permanece em 10%; o teto de população recebe a redução uma única vez (86 inimigos comuns/especiais já em campo, com chefes agendados podendo excedê-lo).
+- A pressão dos inimigos considera a variedade de poderes e o número de aliados, não cada nível comprado no Hangar. Depois da redução geral de 15%, o fluxo de inimigos comuns caiu mais 10% (23,5% abaixo do ritmo original). Ondas e hordas de nível usam o ajuste; mini-chefes e guardiões agendados mantêm suas aparições. O teto de população continua único (86 inimigos já em campo, com chefes agendados podendo excedê-lo).
 - Sobrecarga nunca piora a cadência de uma nave já rápida. As prévias mostram o efeito total de ativação, com intervalos e custos reais.
 - Vitória final não exige escolher mais uma recompensa. Recompensas comuns não travam com XP excedente no nível 32.
 - Projéteis da nave usam colisão pelo trajeto e ordem de impacto, evitando atravessar alvos sem causar dano em frames mais lentos.

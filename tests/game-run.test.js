@@ -423,7 +423,7 @@ test('charged shots explode on asteroids and produce a readable effect ring', ()
   assert.ok(game.state.entities.rings.some(ring => ring.kind === 'charged'));
 });
 
-test('normal waves use a 10% lower enemy flow and population cap', () => {
+test('common enemies have a cumulative 23.5% lower flow and respect population cap', () => {
   const game = createHarness();
   game.state.entities.enemies = Array.from({ length: 19 }, () => ({}));
   game.state.spawnTimer = .1;
@@ -431,10 +431,12 @@ test('normal waves use a 10% lower enemy flow and population cap', () => {
   game.spawn = () => { spawned += 1; };
   game.spawnEnemies(.2);
   assert.equal(spawned, 0);
-  assert.equal(RUN_RULES.enemySpawnScale, .9);
+  assert.equal(RUN_RULES.enemySpawnScale, .85);
+  assert.equal(RUN_RULES.commonEnemySpawnScale, .9);
+  assert.equal(RUN_RULES.enemySpawnScale * RUN_RULES.commonEnemySpawnScale, .765);
 });
 
-test('level-up hordes spawn about 10% fewer enemies and respect the adjusted ceiling', () => {
+test('level-up common-enemy hordes spawn about 23.5% fewer mobs and keep bosses unchanged', () => {
   const game = createHarness();
   game.state.entities.enemies = Array.from({ length: 85 }, () => ({}));
   let spawned = 0;
@@ -446,7 +448,7 @@ test('level-up hordes spawn about 10% fewer enemies and respect the adjusted cei
   let hordeSize = 0;
   freshRun.spawn = () => { hordeSize += 1; };
   freshRun.levelUp();
-  assert.equal(hordeSize, 15);
+  assert.equal(hordeSize, 13);
   assert.equal(RUN_RULES.enemyCap, 86);
 });
 

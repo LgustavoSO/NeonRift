@@ -369,13 +369,14 @@ export class Game {
   spawnEnemies(delta) {
     const state = this.state;
     const pressure = this.threatLevel();
+    const commonEnemyScale = RUN_RULES.enemySpawnScale * RUN_RULES.commonEnemySpawnScale;
     const waveMaximum = 14 + state.wave * 5 + state.level * 2 + this.powerCount() * 3;
-    const maximum = Math.min(RUN_RULES.enemyCap, Math.max(1, Math.round(waveMaximum * RUN_RULES.enemySpawnScale)));
+    const maximum = Math.min(RUN_RULES.enemyCap, Math.max(1, Math.round(waveMaximum * commonEnemyScale)));
     state.spawnTimer -= delta;
     if (state.waveBreak > 0 || state.spawnTimer > 0 || state.entities.enemies.length >= maximum) return;
     this.spawn(this.randomUnlockedEnemyType());
     const interval = Math.max(.15, .7 - state.wave * .025 - state.level * .008 - this.powerCount() * .035 - pressure * .035);
-    state.spawnTimer = interval / RUN_RULES.enemySpawnScale * random(.72, 1.25);
+    state.spawnTimer = interval / commonEnemyScale * random(.72, 1.25);
   }
 
   unlockedEnemyTypes() { return unlockedEnemyTypes(this.state.bossesDefeated); }
@@ -801,7 +802,7 @@ export class Game {
     state.player.hp += hpRestored;
     state.nextXp = Math.ceil(state.nextXp * 1.16 + state.level * 1.1);
     const plannedHorde = Math.min(48, 12 + state.level * 2);
-    const count = Math.min(Math.ceil(plannedHorde * RUN_RULES.enemySpawnScale), Math.max(0, RUN_RULES.enemyCap - state.entities.enemies.length));
+    const count = Math.min(Math.ceil(plannedHorde * RUN_RULES.enemySpawnScale * RUN_RULES.commonEnemySpawnScale), Math.max(0, RUN_RULES.enemyCap - state.entities.enemies.length));
     for (let index = 0; index < count; index += 1) this.spawn(this.randomUnlockedEnemyType());
     if (state.level >= 3 && state.level % 3 === 0 && state.level % 4 !== 0) {
       const variants = this.unlockedMiniBossVariants();
