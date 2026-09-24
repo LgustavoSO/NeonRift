@@ -1,7 +1,7 @@
 export const MAX_RUN_LEVEL = 32;
 export const MAX_RUN_COMPANIONS = 4;
 export const MAX_PERMANENT_UPGRADE_LEVEL = 10;
-export const MAX_RUN_POWER_LEVEL = 10;
+export const MAX_POWER_TARGETS = 10;
 export const MAX_COMPANION_LEVEL = 5;
 export const BOSS_SCHEDULE = Object.freeze({ 4: 1, 8: 1, 12: 1, 16: 1, 20: 1, 24: 1, 28: 1, 32: 1 });
 export const TOTAL_BOSSES = Object.values(BOSS_SCHEDULE).reduce((total, count) => total + count, 0);

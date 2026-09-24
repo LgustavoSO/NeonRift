@@ -1,5 +1,6 @@
 import { TAU, clamp, hexagon } from '../core/math.js';
 import { MAX_COMPANION_LEVEL, TOTAL_BOSSES } from '../data/hangar.js';
+import { getHordeProgress } from '../data/horde-progress.js';
 
 export class Renderer {
   constructor(canvas) {
@@ -327,10 +328,60 @@ export class Renderer {
     context.fillText(disabled ? `${companion.disabledTimer.toFixed(1)}s` : `L${companion.level}/${MAX_COMPANION_LEVEL}`, companion.x, companion.y - 15);
   }
 
+  drawHordeProgress(context, state, width, padding) {
+    const compact = width < 600;
+    const panelWidth = compact ? Math.floor(width * .44) : 244;
+    const panelHeight = compact ? 91 : 130;
+    const x = width - padding - panelWidth;
+    const y = padding + 69;
+    const progress = getHordeProgress(state);
+    const enemyNoun = progress.activeEnemies === 1 ? 'inimigo' : 'inimigos';
+    const phase = {
+      break: { color: '#6feeff', title: 'REAGRUPAMENTO', detail: `Nova onda em ${progress.remaining.toFixed(1)}s` },
+      combat: { color: '#71e8ff', title: 'ONDA EM COMBATE', detail: `${progress.activeEnemies} ${enemyNoun} em campo · avanço em ${Math.ceil(progress.remaining)}s` },
+      cleanup: { color: '#ffcf75', title: 'LIMPE O CAMPO', detail: `Restam ${progress.activeEnemies} ${enemyNoun} · avanço em ${Math.ceil(progress.remaining)}s` },
+      ready: { color: '#8effca', title: 'CAMPO LIMPO', detail: 'Avançando para a próxima onda' },
+    }[progress.phase];
+
+    context.save();
+    context.fillStyle = '#071323e8';
+    context.fillRect(x, y, panelWidth, panelHeight);
+    context.strokeStyle = `${phase.color}88`;
+    context.lineWidth = 1;
+    context.strokeRect(x + .5, y + .5, panelWidth - 1, panelHeight - 1);
+    context.fillStyle = phase.color;
+    context.fillRect(x, y, 3, panelHeight);
+    context.textAlign = 'left';
+    context.fillStyle = '#9ab9cb';
+    context.font = `bold ${compact ? 8 : 9}px system-ui`;
+    context.fillText('PROGRESSO DA HORDA', x + 12, y + 16);
+    context.textAlign = 'right';
+    context.fillStyle = '#e9faff';
+    context.font = `bold ${compact ? 12 : 14}px system-ui`;
+    context.fillText(`ONDA ${String(state.wave).padStart(2, '0')}`, x + panelWidth - 11, y + 37);
+
+    const barY = compact ? y + 46 : y + 52;
+    context.fillStyle = '#21374b';
+    context.fillRect(x + 11, barY, panelWidth - 22, 6);
+    context.fillStyle = phase.color;
+    context.fillRect(x + 11, barY, (panelWidth - 22) * clamp(progress.progress, 0, 1), 6);
+    context.textAlign = 'left';
+    context.fillStyle = phase.color;
+    context.font = `bold ${compact ? 8 : 9}px system-ui`;
+    context.fillText(phase.title, x + 11, compact ? y + 66 : y + 78, panelWidth - 22);
+    context.fillStyle = '#c2d5e0';
+    context.font = `${compact ? 8 : 9}px system-ui`;
+    context.fillText(phase.detail, x + 11, compact ? y + 81 : y + 99, panelWidth - 22);
+    context.restore();
+
+    return { top: y, bottom: y + panelHeight, compact };
+  }
+
   drawHud(context, state, bestScore, width) {
     const { player } = state;
+    const compact = width < 600;
     const padding = width < 600 ? 13 : 25;
-    const panelWidth = width < 600 ? Math.min(276, width - 26) : 300;
+    const panelWidth = compact ? Math.floor(width * .5) - 18 : 300;
     const panelHeight = 278;
     context.fillStyle = '#081426dc';
     context.fillRect(padding, padding, panelWidth, panelHeight);
@@ -339,23 +390,19 @@ export class Renderer {
     context.textAlign = 'left';
     context.fillStyle = '#e5f9ff';
     context.font = 'bold 12px system-ui';
-    context.fillText(`ETAPA 1 · NÍVEL ${state.level}/32`, padding + 11, padding + 20);
-    context.textAlign = 'right';
-    context.fillStyle = '#81bdd8';
-    context.font = 'bold 11px system-ui';
-    context.fillText(`ONDA ${state.wave}`, padding + panelWidth - 11, padding + 20);
+    context.fillText(`ETAPA 1 · NÍVEL ${state.level}/32`, padding + 11, padding + 20, panelWidth - 22);
     context.textAlign = 'left';
     context.fillStyle = '#a8c5d6';
     context.font = '10px system-ui';
     const hpPercent = Math.round(clamp(player.hp / player.maxHp, 0, 1) * 100);
-    context.fillText(`VIDA DO CASCO · ${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp} (${hpPercent}%)`, padding + 11, padding + 39);
+    context.fillText(`${compact ? 'CASCO' : 'VIDA DO CASCO'} · ${Math.max(0, Math.ceil(player.hp))} / ${player.maxHp}${compact ? '' : ` (${hpPercent}%)`}`, padding + 11, padding + 39, panelWidth - 22);
     context.fillStyle = '#294258';
     context.fillRect(padding + 11, padding + 45, panelWidth - 22, 8);
     context.fillStyle = player.hp / player.maxHp < .3 ? '#ff5877' : '#4df8a8';
     context.fillRect(padding + 11, padding + 45, (panelWidth - 22) * clamp(player.hp / player.maxHp, 0, 1), 8);
     context.fillStyle = state.level >= 32 ? '#ffe783' : '#a8c5d6';
     context.font = '10px system-ui';
-    context.fillText(state.level >= 32 ? 'NÍVEL MÁXIMO · NÚCLEO DO RIFT' : `EXPERIÊNCIA PARA O NÍVEL ${state.level + 1} · ${state.xp} / ${state.nextXp} XP`, padding + 11, padding + 69);
+    context.fillText(state.level >= 32 ? 'NÍVEL MÁXIMO · NÚCLEO DO RIFT' : `${compact ? 'XP' : `EXPERIÊNCIA PARA O NÍVEL ${state.level + 1}`} · ${state.xp} / ${state.nextXp}`, padding + 11, padding + 69, panelWidth - 22);
     context.fillStyle = '#294258';
     context.fillRect(padding + 11, padding + 75, panelWidth - 22, 6);
     context.fillStyle = state.level >= 32 ? '#ffe783' : '#6ee6ff';
@@ -380,11 +427,12 @@ export class Renderer {
       context.textAlign = 'left';
       context.fillStyle = '#a8c5d6';
       context.font = '10px system-ui';
-      context.fillText(stat.label, padding + 11, y);
+      const shortLabels = ['Dano', 'Cadência', 'Velocidade', 'Rajada', 'Perfuração', 'Crítico', 'Blindagem'];
+      context.fillText(compact ? shortLabels[index] : stat.label, padding + 11, y, panelWidth * .48);
       context.textAlign = 'right';
       context.fillStyle = '#e8faff';
       context.font = 'bold 10px system-ui';
-      context.fillText(String(stat.value), padding + panelWidth - 11, y);
+      context.fillText(String(stat.value), padding + panelWidth - 11, y, panelWidth * .43);
     });
     context.textAlign = 'left';
     context.strokeStyle = '#40759080';
@@ -398,7 +446,7 @@ export class Renderer {
     context.textAlign = 'right';
     context.fillStyle = state.companions.length ? '#d9fff5' : '#8299ac';
     context.font = '9px system-ui';
-    context.fillText(crew, padding + panelWidth - 11, padding + 250, panelWidth - 91);
+    context.fillText(crew, padding + panelWidth - 11, padding + (compact ? 266 : 250), compact ? panelWidth - 22 : panelWidth - 91);
 
     context.textAlign = 'right';
     context.font = 'bold 18px system-ui';
@@ -410,24 +458,35 @@ export class Renderer {
     context.fillStyle = state.stageCompleted || state.bossesDefeated >= TOTAL_BOSSES ? '#ffe783' : '#83aec8';
     context.font = 'bold 11px system-ui';
     context.fillText(state.stageCompleted ? 'ETAPA 1 CONCLUÍDA' : `CHEFES ${state.bossesDefeated}/${TOTAL_BOSSES}`, width - padding, padding + 55);
+    const hordeLayout = this.drawHordeProgress(context, state, width, padding);
+    const rightStatusY = hordeLayout.bottom + 17;
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
-    context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 75);
-    const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩', activeShield: '🔰', teleport: '🌀', minefield: '💣', riftLance: '⚔️' };
-    const squadLevel = Math.max(0, ...state.companions.map(companion => companion.level));
-    const activePowers = [state.companions.length ? `🛸${state.companions.length} · L${squadLevel}` : '', ...Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${powerIcons[key]}×${value}`)].filter(Boolean).join('  ');
+    context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, rightStatusY);
+    const powerNames = { shield: 'Escudo', charged: 'Carregado', nova: 'Pulso', aimbot: 'Mira', overdrive: 'Sobrecarga', singularity: 'Singularidade', ionStorm: 'Tempestade', activeShield: 'Barreira', teleport: 'Salto', minefield: 'Minas', riftLance: 'Lança' };
+    const activePowers = Object.entries(state.powers).filter(([key, value]) => key !== 'companion' && value > 0).map(([key]) => `${powerNames[key]} H${state.powerBonuses?.[key] ?? 0}`);
     context.fillStyle = '#d5b4ff';
-    context.font = '12px system-ui';
-    context.fillText(activePowers || 'SEM SUPERPODERES ATIVOS', width - padding, padding + 95, Math.max(120, width * .4));
-    context.fillStyle = '#ffe783';
-    context.font = 'bold 11px system-ui';
-    context.fillText(`◈ ${state.creditsEarned} CR NESTA RUN`, width - padding, padding + 165);
+    context.font = `${compact ? 9 : 11}px system-ui`;
+    const lines = [];
+    const availableWidth = compact ? Math.floor(width * .44) : 244;
+    for (const power of activePowers) {
+      const last = lines.length - 1;
+      const joined = last >= 0 ? `${lines[last]} · ${power}` : power;
+      if (last >= 0 && context.measureText(joined).width <= availableWidth) lines[last] = joined;
+      else lines.push(power);
+    }
+    if (!lines.length) lines.push('SEM SUPERPODERES ATIVOS');
+    lines.forEach((line, index) => context.fillText(line, width - padding, rightStatusY + 20 + index * 19, availableWidth));
+    let cooldownRow = lines.length - 1;
     if (state.powers.charged) {
       context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb';
-      context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 113);
+      context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1;
     }
-    if (state.powers.teleport) { context.fillStyle = state.teleportCooldown <= 0 ? '#d5b4ff' : '#9eabbb'; context.fillText(`SALTO Q ${state.teleportCooldown <= 0 ? 'PRONTO' : `${state.teleportCooldown.toFixed(1)}s`}`, width - padding, padding + 133); }
-    if (state.powers.activeShield) { context.fillStyle = state.activeShieldCooldown <= 0 ? '#9fd7ff' : '#9eabbb'; context.fillText(`BARREIRA E ${state.activeShieldTime > 0 ? `${state.activeShieldTime.toFixed(1)}s` : state.activeShieldCooldown <= 0 ? 'PRONTA' : `${state.activeShieldCooldown.toFixed(1)}s`}`, width - padding, padding + (state.powers.charged ? 153 : 113)); }
-    if (state.mode === 'paused') { context.fillStyle = '#020914b8'; context.fillRect(0, 0, width, this.height); context.textAlign = 'center'; context.fillStyle = '#fff'; context.font = 'bold 40px system-ui'; context.fillText('PAUSADO', width / 2, this.height / 2); context.font = '16px system-ui'; context.fillText('Pressione P para continuar', width / 2, this.height / 2 + 30); }
+    if (state.powers.teleport) { context.fillStyle = state.teleportCooldown <= 0 ? '#d5b4ff' : '#9eabbb'; context.fillText(`SALTO Q ${state.teleportCooldown <= 0 ? 'PRONTO' : `${state.teleportCooldown.toFixed(1)}s`}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1; }
+    if (state.powers.activeShield) { context.fillStyle = state.activeShieldCooldown <= 0 ? '#9fd7ff' : '#9eabbb'; context.fillText(`BARREIRA E ${state.activeShieldTime > 0 ? `${state.activeShieldTime.toFixed(1)}s` : state.activeShieldCooldown <= 0 ? 'PRONTA' : `${state.activeShieldCooldown.toFixed(1)}s`}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1; }
+    context.fillStyle = '#ffe783';
+    context.font = 'bold 11px system-ui';
+    context.fillText(`◈ ${state.creditsEarned} CR NESTA RUN`, width - padding, rightStatusY + 43 + cooldownRow * 19);
+    if (state.mode === 'paused') { context.fillStyle = '#020914b8'; context.fillRect(0, 0, width, this.height); context.textAlign = 'center'; context.fillStyle = '#fff'; context.font = 'bold 40px system-ui'; context.fillText('PAUSADO', width / 2, this.height / 2); context.font = '14px system-ui'; context.fillText('Pressione P ou toque em RETOMAR', width / 2, this.height / 2 + 30); }
   }
 }

@@ -1,20 +1,14 @@
 import { POWERS } from './upgrades.js';
-import { MAX_COMPANION_LEVEL, MAX_RUN_POWER_LEVEL } from './hangar.js';
+import { MAX_COMPANION_LEVEL, MAX_POWER_TARGETS } from './hangar.js';
+import { shieldStats } from './power-stats.js';
 
 const format = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('pt-BR', { maximumFractionDigits: digits });
 const points = value => `${format(value * 100)} p.p.`;
 
 export function powerLevelsAdded(power, state) {
   const current = state.powers[power.key] ?? 0;
-  const requested = 1 + (state.powerBonuses?.[power.key] ?? 0);
-  const cap = powerRunMaxLevel(power, state);
-  return Math.max(0, cap == null ? requested : Math.min(requested, cap - current));
-}
-
-export function powerRunMaxLevel(power, state) {
-  if (power.runMaxLevel == null) return null;
-  const permanentLevels = state.powerBonuses?.[power.key] ?? 0;
-  return Math.min(MAX_RUN_POWER_LEVEL, power.runMaxLevel + permanentLevels);
+  if (power.key !== 'companion' && current > 0) return 0;
+  return 1 + (state.powerBonuses?.[power.key] ?? 0);
 }
 
 export function getChoiceProgress(choice, state) {
@@ -25,11 +19,12 @@ export function getChoiceProgress(choice, state) {
     return { current, next, max: MAX_COMPANION_LEVEL, label: 'ALIADO' };
   }
   if (choice.modelId) return { current: null, next: Math.min(MAX_COMPANION_LEVEL, choice.companionGainLevels ?? 1), max: MAX_COMPANION_LEVEL, label: 'NOVO ALIADO' };
+  if (choice.key === 'companion') return { current: null, next: null, max: null, label: 'REFORÇO DE ESQUADRÃO' };
 
-  const current = choice.apply ? state.upgradeLevels[choice.key] ?? 0 : state.powers[choice.key] ?? 0;
   const power = POWERS.find(item => item.key === choice.key);
-  const increase = choice.apply ? 1 : power ? powerLevelsAdded(power, state) : 1;
-  return { current, next: current + increase, max: choice.apply ? choice.maxLevel : power ? powerRunMaxLevel(power, state) : null, label: 'HABILIDADE' };
+  if (!choice.apply && power) return { current: null, next: null, max: null, label: 'ATIVAÇÃO ÚNICA' };
+  const current = choice.apply ? state.upgradeLevels[choice.key] ?? 0 : state.powers[choice.key] ?? 0;
+  return { current, next: current + 1, max: choice.maxLevel ?? null, label: 'HABILIDADE' };
 }
 
 export function getChoiceNextEffect(choice, state) {
@@ -80,17 +75,17 @@ export function getChoiceNextEffect(choice, state) {
 
   switch (choice.key) {
     case 'companion': return `Adiciona um aliado no nível ${increase} ou avança ${increase} nível(is) no drone escolhido; cada nível melhora dano e cadência.`;
-    case 'shield': return `Escudo: duração ${format(2.4 + level * .8)}s → ${format(2.4 + next * .8)}s; recarga ${format(Math.max(7, 16 - level * 2))}s → ${format(Math.max(7, 16 - next * 2))}s; cadência −${format((1 - 1 / (1 + .05 * increase)) * 100)}%.`;
-    case 'charged': return `Tiro carregado: +${format(increase)}× dano base; recarga ${format(Math.max(2.8, 7 - level * .7))}s → ${format(Math.max(2.8, 7 - next * .7))}s.`;
-    case 'nova': return `Pulso: raio +${25 * increase} px e +${increase}× dano; custa ${5 * increase} de vida máxima.`;
-    case 'aimbot': return `+${Math.min(MAX_RUN_POWER_LEVEL, next) - Math.min(MAX_RUN_POWER_LEVEL, level)} tiro(s) reto(s) de apoio (até ${MAX_RUN_POWER_LEVEL}); cadência −${format((1 - 1 / (1 + .04 * increase)) * 100)}%.`;
-    case 'overdrive': return `+${format((1.12 ** increase - 1) * 100)}% de dano e +${format((1 / (.86 ** increase) - 1) * 100)}% de cadência; velocidade −${points(1 - .97 ** increase)}.`;
-    case 'singularity': return `Raio +${24 * increase} px, dano +${format(.2 * increase)}× e −${3 * increase} de vida máxima.`;
-    case 'ionStorm': return `+${Math.min(MAX_RUN_POWER_LEVEL, next + 2) - Math.min(MAX_RUN_POWER_LEVEL, level + 2)} alvo(s), +${format(.28 * increase)}× dano; blindagem −${points(.02 * increase)}.`;
-    case 'activeShield': return `Barreira: duração +${format(.45 * increase)}s; recarga ${format(Math.max(5.5, 15 - level * 1.4))}s → ${format(Math.max(5.5, 15 - next * 1.4))}s.`;
-    case 'teleport': return `Salto: alcance +${24 * increase} px; recarga ${format(Math.max(4, 9 - level * .8))}s → ${format(Math.max(4, 9 - next * .8))}s.`;
-    case 'minefield': return `Minas: dano +${format(.5 * increase)}×; intervalo ${format(Math.max(2.2, 5.4 - level * .55))}s → ${format(Math.max(2.2, 5.4 - next * .55))}s.`;
-    case 'riftLance': return `Lança: +${Math.min(MAX_RUN_POWER_LEVEL, next + 1) - Math.min(MAX_RUN_POWER_LEVEL, level + 1)} alvo(s), +${format(.55 * increase)}× dano; intervalo −${format(.45 * increase)}s.`;
+    case 'shield': { const stats = shieldStats(next); return `Proteção por ${format(stats.duration)}s; recarga de ${format(stats.cooldown)}s após terminar. Cadência −${format((1 - 1 / (1 + .05 * (state.powerBonuses?.shield ?? 0))) * 100)}% pelo Hangar.`; }
+    case 'charged': return `Tiro carregado: ${format((3 + next) * 3)}× dano base (crítico incluso); recarga ${format(Math.max(2.8, 7 - next * .7))}s. Clique para disparar.`;
+    case 'nova': return `Pulso: raio ${155 + 25 * next} px e ${2 + next}× dano a cada ${format(Math.max(4.5, 10 - next))}s; custa ${Math.min(Math.max(0, player.maxHp - 60), 5 * (state.powerBonuses?.nova ?? 0))} de vida máxima pelo Hangar.`;
+    case 'aimbot': return `+${Math.min(MAX_POWER_TARGETS, next) - Math.min(MAX_POWER_TARGETS, level)} tiro(s) reto(s) de apoio (até ${MAX_POWER_TARGETS}); cadência −${format((1 - 1 / (1 + .04 * (state.powerBonuses?.aimbot ?? 0))) * 100)}% pelo nível do Hangar.`;
+    case 'overdrive': return `+${format((1.12 ** increase - 1) * 100)}% de dano e +${format((player.rate / Math.min(player.rate, Math.max(.07, player.rate * .86 ** increase)) - 1) * 100)}% de cadência; velocidade −${format((1 - Math.max(120, player.move * .97 ** (state.powerBonuses?.overdrive ?? 0)) / player.move) * 100)}% pelo Hangar.`;
+    case 'singularity': return `Atrai e desacelera: raio ${230 + 24 * next} px, ${format(.7 + .2 * next)}× dano a cada ${format(Math.max(4.2, 8 - next * .7))}s; custa ${Math.min(Math.max(0, player.maxHp - 60), 3 * (state.powerBonuses?.singularity ?? 0))} de vida máxima.`;
+    case 'ionStorm': return `Atinge até ${Math.min(MAX_POWER_TARGETS, next + 2)} alvos com ${format(1.15 + .28 * next)}× dano a cada ${format(Math.max(2.4, 5 - next * .45))}s; blindagem −${points(.02 * (state.powerBonuses?.ionStorm ?? 0))} pelo Hangar.`;
+    case 'activeShield': { const stats = shieldStats(next, true); return `Tecla E: proteção por ${format(stats.duration)}s; recarga de ${format(stats.cooldown)}s após terminar.`; }
+    case 'teleport': return `Tecla Q: salto de até ${190 + 24 * next} px, ${format(.45)}s de invulnerabilidade; recarga ${format(Math.max(4, 9 - next * .8))}s.`;
+    case 'minefield': return `Instala uma mina a cada ${format(Math.max(2.2, 5.4 - next * .55))}s: explosão de ${format((1.8 + .5 * next) * 2)}× dano em raio de 112 px.`;
+    case 'riftLance': return `Atinge até ${Math.min(MAX_POWER_TARGETS, next + 1)} alvos com ${format(1.4 + .55 * next)}× dano a cada ${format(Math.max(1.5, 3.8 - next * .45))}s.`;
     default: return choice.description;
   }
 }

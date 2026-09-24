@@ -8,6 +8,7 @@ export class InputController {
   onChargedShot = () => {};
   onPointerMove = () => {};
   onPause = () => {};
+  onBlur = () => {};
   onChoice = () => {};
 
   constructor(canvas, dashButton, joystick, nub, teleportButton, shieldButton) {
@@ -16,7 +17,9 @@ export class InputController {
     this.nub = nub;
     addEventListener('keydown', event => this.keyDown(event));
     addEventListener('keyup', event => this.keys.delete(event.key.toLowerCase()));
-    addEventListener('blur', () => { this.keys.clear(); this.joystick = { x: 0, y: 0 }; this.resetJoystick(); });
+    const loseFocus = () => { this.keys.clear(); this.resetJoystick(); this.onBlur(); };
+    addEventListener('blur', loseFocus);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) loseFocus(); });
     canvas.addEventListener('pointermove', event => this.updatePointer(event));
     canvas.addEventListener('pointerdown', event => {
       this.updatePointer(event);

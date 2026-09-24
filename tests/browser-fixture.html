@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Rift · Validação local</title>
+<link rel="stylesheet" href="/src/styles/main.css">
+<body>
+<script type="module">
+// Development-only entry point: Vite's production build includes index.html only.
+// Run on a separate origin/port so QA never changes the player's saved career.
+import { Renderer } from '/src/render/Renderer.js';
+import { InputController } from '/src/input/InputController.js';
+import { UIController } from '/src/ui/UIController.js';
+import { Game } from '/src/game/Game.js';
+import { createDefaultProfile } from '/src/core/profile.js';
+import { POWERS, UPGRADES } from '/src/data/upgrades.js';
+import { COMPANION_MODELS } from '/src/data/hangar.js';
+
+const template = new DOMParser().parseFromString(await (await fetch('/index.html')).text(), 'text/html');
+document.body.append(template.querySelector('main'));
+const canvas = document.querySelector('#game-canvas');
+const input = new InputController(canvas, document.querySelector('#dash-touch'), document.querySelector('#joystick'), document.querySelector('#joystick-nub'), document.querySelector('#teleport-touch'), document.querySelector('#shield-touch'));
+const ui = new UIController();
+const game = new Game({ renderer: new Renderer(canvas), input, ui });
+const controls = document.createElement('nav');
+controls.setAttribute('aria-label', 'Cenários de validação');
+controls.style.cssText = 'position:fixed;bottom:4px;left:4px;z-index:20;display:flex;gap:4px;font:10px system-ui;flex-wrap:wrap;max-width:90vw';
+document.body.append(controls);
+function scenario(name, action) {
+  const button = document.createElement('button');
+  button.textContent = name;
+  button.onclick = action;
+  controls.append(button);
+}
+function start() {
+  game.profile = createDefaultProfile();
+  game.start();
+}
+scenario('QA Escolhas', () => {
+  start();
+  game.state.mode = 'choice';
+  game.state.level = 2;
+  ui.showUpgrade(game.state, [POWERS.find(p => p.key === 'shield'), POWERS.find(p => p.key === 'companion'), UPGRADES.find(p => p.key === 'shots')], choice => game.applyChoice(choice));
+});
+scenario('QA Combate avançado', () => {
+  start();
+  game.state.level = 32;
+  game.state.bossesDefeated = 7;
+  game.state.powerBonuses = Object.fromEntries(POWERS.filter(p => p.key !== 'companion').map(p => [p.key, 10]));
+  for (const power of POWERS.filter(p => p.key !== 'companion')) game.grantPower(power);
+  for (const model of COMPANION_MODELS.slice(0, 3)) game.addCompanion(model, 5);
+  for (let i = 0; i < 65; i += 1) game.spawn(game.randomUnlockedEnemyType());
+  game.spawnBoss();
+  game.state.player.invulnerable = 300;
+});
+scenario('QA Derrota', () => { start(); game.state.player.hp = 0; game.finishRun('defeat'); });
+scenario('QA Vitória', () => { start(); game.state.level = 32; game.state.bossesDefeated = 8; game.state.stageCompleted = true; game.finishRun('victory'); });
+scenario('QA Hangar', () => {
+  game.profile = createDefaultProfile();
+  game.profile.credits = 1000;
+  game.openHangar();
+});
+</script>
+</body>
+</html>

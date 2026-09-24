@@ -1,6 +1,6 @@
 import { pickChoices, PERMANENT_POWER_UPGRADES, POWERS } from '../data/upgrades.js';
 import { getChoiceNextEffect, getChoiceProgress } from '../data/choice-details.js';
-import { COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS, TOTAL_BOSSES } from '../data/hangar.js';
+import { COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_PERMANENT_UPGRADE_LEVEL, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS, TOTAL_BOSSES } from '../data/hangar.js';
 import { upgradeCost } from '../core/profile.js';
 
 export class UIController {
@@ -14,6 +14,8 @@ export class UIController {
     this.choiceTitle = document.querySelector('#choice-title');
     this.choiceHint = this.choiceScreen.querySelector('.hint');
     this.choiceHandler = null;
+    this.pauseButton = document.querySelector('#pause-button');
+    this.pauseButton.addEventListener('click', () => this.onPause?.());
     this.profile = null;
     document.querySelector('#play-button').addEventListener('click', () => this.onStart?.());
     document.querySelector('#hangar-start').addEventListener('click', () => this.onStart?.());
@@ -27,6 +29,7 @@ export class UIController {
   onOpenHangar = null;
 
   showMenu(profile = this.profile) {
+    this.pauseButton.classList.add('is-hidden');
     this.profile = profile;
     this.menu.classList.remove('is-hidden');
     this.choiceScreen.classList.add('is-hidden');
@@ -37,6 +40,7 @@ export class UIController {
   }
 
   showHangar(profile, actions) {
+    this.pauseButton.classList.add('is-hidden');
     this.profile = profile;
     this.menu.classList.add('is-hidden');
     this.choiceScreen.classList.add('is-hidden');
@@ -64,7 +68,7 @@ export class UIController {
       const button = document.createElement('button');
       button.type = 'button'; button.className = `hangar-card${unlocked ? '' : ' is-locked'}`;
       button.disabled = !unlocked || level >= item.maxLevel || profile.credits < cost;
-      button.innerHTML = `<span class="hangar-card__icon">${item.icon}</span><b>${item.name}</b><small>${unlocked ? `NÍVEL ${level}/${item.maxLevel}` : 'DESBLOQUEIA NA CARREIRA'}</small><span>${item.description}</span>${item.tradeoff ? `<small class="choice__tradeoff">${item.tradeoff}</small>` : ''}<strong>${!unlocked ? `CARREIRA ${SKILL_UNLOCKS.find(skill => skill.key === item.key)?.level ?? '—'}` : level >= item.maxLevel ? 'MÁXIMO' : `◈ ${cost} CR`}</strong>`;
+      button.innerHTML = `<span class="hangar-card__icon">${item.icon}</span><b>${item.name}</b><small>${unlocked ? `HANGAR · NÍVEL ${level}/${item.maxLevel}` : 'DESBLOQUEIA NA CARREIRA'}</small><span>${item.description}</span>${item.tradeoff ? `<small class="choice__tradeoff">${item.tradeoff}</small>` : ''}<strong>${!unlocked ? `CARREIRA ${SKILL_UNLOCKS.find(skill => skill.key === item.key)?.level ?? '—'}` : level >= item.maxLevel ? 'MÁXIMO' : `◈ ${cost} CR`}</strong>`;
       button.addEventListener('click', () => actions.buyPowerUpgrade(item.key));
       powerRoot.append(button);
     }
@@ -79,6 +83,9 @@ export class UIController {
   }
 
   showPlaying() {
+    this.choiceToken = null;
+    this.pauseButton.classList.remove('is-hidden');
+    this.setPaused(false);
     this.menu.classList.add('is-hidden'); this.choiceScreen.classList.add('is-hidden'); this.hangarScreen.classList.add('is-hidden'); this.endScreen.classList.add('is-hidden');
   }
 
@@ -113,34 +120,59 @@ export class UIController {
   }
 
   renderChoices(choices, state, onChoice) {
+    this.pauseButton.classList.add('is-hidden');
+    const token = {};
+    this.choiceToken = token;
     const shortcuts = choices.slice(0, 9).map((_, index) => `<kbd>${index + 1}</kbd>`).join('');
     this.choiceHint.innerHTML = `<span>${choices.length > 3 ? 'Escolha uma opção · atalhos' : 'Atalhos do teclado'}</span><span class="choice-shortcuts">${shortcuts}</span>`;
     this.choiceGrid.replaceChildren();
     choices.forEach((choice, index) => {
-      const isCompanion = choice.targetId != null || Boolean(choice.modelId);
+      const isCompanion = choice.key === 'companion' || choice.targetId != null || Boolean(choice.modelId);
       const isSuperpower = !isCompanion && !choice.apply && POWERS.some(power => power.key === choice.key);
       const type = isCompanion ? 'COMPANHEIRO' : isSuperpower ? 'SUPERPODER' : 'HABILIDADE';
       const typeClass = isCompanion ? 'companion' : isSuperpower ? 'superpower' : 'skill';
       const progress = getChoiceProgress(choice, state);
       const nextEffect = getChoiceNextEffect(choice, state);
-      const progressMarkup = progress.current == null
+      const hangarPowerLevel = state.powerBonuses?.[choice.key] ?? 0;
+      const progressMarkup = isSuperpower
+        ? `<span class="choice__progress choice__progress--new choice__progress--activation"><span>EXPEDIÇÃO</span><b>ATIVAÇÃO ÚNICA</b><small>POTÊNCIA DO HANGAR · NÍVEL ${hangarPowerLevel}/${MAX_PERMANENT_UPGRADE_LEVEL}</small></span>`
+        : choice.key === 'companion' && choice.targetId == null && !choice.modelId
+          ? `<span class="choice__progress choice__progress--new"><span>REFORÇO DE ESQUADRÃO</span><b>ESCOLHA O ALIADO</b></span>`
+          : progress.current == null
         ? `<span class="choice__progress choice__progress--new"><span>${progress.label}</span><b>NÍVEL ${progress.next}${progress.max == null ? '' : ` / ${progress.max}`}</b></span>`
         : `<span class="choice__progress"><span><small>ATUAL</small><b>NÍVEL ${progress.current}</b></span><i aria-hidden="true">→</i><span><small>APÓS ESCOLHA</small><b>NÍVEL ${progress.next}${progress.max == null ? '' : ` / ${progress.max}`}</b></span></span>`;
       const button = document.createElement('button'); button.type = 'button'; button.className = `choice choice--${typeClass}`;
-      const accessibleProgress = progress.current == null ? `${progress.label}, nível ${progress.next}` : `nível atual ${progress.current}, após a escolha nível ${progress.next}${progress.max == null ? '' : ` de ${progress.max}`}`;
-      button.setAttribute('aria-label', `${type}: ${choice.name}. ${accessibleProgress}. Próximo nível: ${nextEffect}.`);
-      button.innerHTML = `<span class="choice__type">${type}</span><span class="choice__icon">${choice.icon}</span><span class="choice__name">${index + 1}. ${choice.name}</span>${progressMarkup}<span class="choice__next"><small>O QUE O PRÓXIMO NÍVEL ADICIONA</small><span>${nextEffect}</span></span><span class="choice__description">${choice.description}</span>${choice.tradeoff ? `<span class="choice__tradeoff">${choice.tradeoff}</span>` : ''}`;
-      button.addEventListener('click', () => onChoice(choice)); this.choiceGrid.append(button);
+      const accessibleProgress = isSuperpower
+        ? `ativação única na partida; potência do Hangar nível ${hangarPowerLevel} de ${MAX_PERMANENT_UPGRADE_LEVEL}`
+        : choice.key === 'companion' && choice.targetId == null && !choice.modelId
+          ? 'escolha qual companheiro adicionar ou evoluir'
+          : progress.current == null ? `${progress.label}, nível ${progress.next}` : `nível atual ${progress.current}, após a escolha nível ${progress.next}${progress.max == null ? '' : ` de ${progress.max}`}`;
+      button.setAttribute('aria-label', `${type}: ${choice.name}. ${accessibleProgress}. ${isSuperpower ? 'Efeito ao ativar' : 'Próximo nível'}: ${nextEffect}.`);
+      button.innerHTML = `<span class="choice__type">${type}</span><span class="choice__icon">${choice.icon}</span><span class="choice__name">${index + 1}. ${choice.name}</span>${progressMarkup}<span class="choice__next"><small>${isSuperpower ? 'EFEITO AO ATIVAR' : 'O QUE O PRÓXIMO NÍVEL ADICIONA'}</small><span>${nextEffect}</span></span><span class="choice__description">${choice.description}</span>${choice.tradeoff ? `<span class="choice__tradeoff">${choice.tradeoff}</span>` : ''}`;
+      button.addEventListener('click', () => {
+        if (this.choiceToken !== token || state.mode !== 'choice' || this.choiceScreen.classList.contains('is-hidden')) return;
+        this.choiceToken = null;
+        onChoice(choice);
+      }); this.choiceGrid.append(button);
     });
   }
 
-  chooseByIndex(index) { this.choiceGrid.children[index]?.click(); }
+  chooseByIndex(index) { if (!this.choiceScreen.classList.contains('is-hidden')) this.choiceGrid.children[index]?.click(); }
+
+  setPaused(paused) {
+    this.pauseButton.textContent = paused ? '▶ RETOMAR' : 'Ⅱ PAUSAR';
+    this.pauseButton.setAttribute('aria-label', paused ? 'Retomar partida' : 'Pausar partida');
+    this.pauseButton.setAttribute('aria-pressed', String(paused));
+  }
 
   showGameOver(state, bestScore) {
+    this.pauseButton.classList.add('is-hidden');
+    this.choiceToken = null;
+    this.choiceScreen.classList.add('is-hidden');
     const victory = state.outcome === 'victory';
     const powerNames = { companion: 'Reforço de esquadrão', shield: 'Escudo reativo', charged: 'Tiro carregado', nova: 'Pulso gravitacional', aimbot: 'Mira automática', overdrive: 'Sobrecarga', singularity: 'Singularidade', ionStorm: 'Tempestade iônica', activeShield: 'Barreira manual', teleport: 'Salto de fase', minefield: 'Campo de minas', riftLance: 'Lança do Rift' };
     const powerIcons = { companion: '🛸', shield: '🛡️', charged: '☄️', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳️', ionStorm: '🌩️', activeShield: '🔰', teleport: '🌀', minefield: '💣', riftLance: '⚔️' };
-    const buildItems = Object.entries(state.powers).filter(([, level]) => level > 0).map(([key, level]) => `<span class="build-chip"><span>${powerIcons[key] ?? '✦'}</span>${powerNames[key] ?? key} <b>×${level}</b></span>`);
+    const buildItems = Object.entries(state.powers).filter(([key, level]) => key !== 'companion' && level > 0).map(([key]) => `<span class="build-chip"><span>${powerIcons[key] ?? '✦'}</span>${powerNames[key] ?? key} <b>HANGAR ${state.powerBonuses?.[key] ?? 0}/${MAX_PERMANENT_UPGRADE_LEVEL}</b></span>`);
     for (const companion of state.companions) buildItems.push(`<span class="build-chip build-chip--companion"><span>${companion.icon ?? '🛸'}</span>${companion.name} <b>N${companion.level}/${MAX_COMPANION_LEVEL}</b></span>`);
     if (!buildItems.length) buildItems.push('<span class="build-chip">Canhão de série</span>');
     const levelPercent = Math.min(100, state.level / MAX_RUN_LEVEL * 100);

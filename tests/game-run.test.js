@@ -6,7 +6,12 @@ import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_PERMANENT_UPG
 import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, unlockedEnemyTypes, unlockedMiniBossVariants } from '../src/data/enemy-progression.js';
 import { PERMANENT_POWER_UPGRADES, POWERS, UPGRADES, pickChoices } from '../src/data/upgrades.js';
 import { getChoiceNextEffect, getChoiceProgress } from '../src/data/choice-details.js';
+import { getHordeProgress } from '../src/data/horde-progress.js';
+import { RUN_RULES } from '../src/data/game-rules.js';
 import { Game } from '../src/game/Game.js';
+import { shieldStats } from '../src/data/power-stats.js';
+import { segmentCircleEntry } from '../src/core/math.js';
+import { UIController } from '../src/ui/UIController.js';
 
 function createHarness() {
   const game = Object.create(Game.prototype);
@@ -37,6 +42,38 @@ test('choice randomizer shuffles without replacement and never mutates the sourc
   assert.notDeepEqual(first, second);
 });
 
+test('horde progress reflects combat, cleanup, a cleared field, and the regroup break', () => {
+  const state = createGameState(1024, 768);
+  state.wave = 2;
+  state.entities.enemies = Array.from({ length: 4 }, () => ({}));
+
+  state.waveBreak = 1.4;
+  assert.deepEqual(getHordeProgress(state), {
+    phase: 'break', progress: 0, remaining: 1.4, activeEnemies: 4, clearTarget: 4,
+  });
+
+  state.waveBreak = 0;
+  state.waveClock = 10;
+  const combat = getHordeProgress(state);
+  assert.equal(combat.phase, 'combat');
+  assert.equal(combat.remaining, RUN_RULES.waveLength - 10);
+  assert.equal(combat.progress, 10 / RUN_RULES.waveLength * .72);
+
+  state.waveClock = 25;
+  const cleanup = getHordeProgress(state);
+  assert.equal(cleanup.phase, 'cleanup');
+  assert.equal(cleanup.remaining, RUN_RULES.waveDeadline - 25);
+  assert.ok(cleanup.progress > .72 && cleanup.progress < 1);
+
+  state.entities.enemies.pop();
+  assert.equal(getHordeProgress(state).phase, 'ready');
+  state.entities.enemies.push({});
+  state.waveClock = RUN_RULES.waveDeadline;
+  assert.deepEqual(getHordeProgress(state), {
+    phase: 'ready', progress: 1, remaining: 0, activeEnemies: 4, clearTarget: 4,
+  });
+});
+
 test('choice preview shows current level, resulting level, and the actual next-level gain', () => {
   const game = createHarness();
   const upgrade = UPGRADES.find(item => item.key === 'damage');
@@ -45,10 +82,12 @@ test('choice preview shows current level, resulting level, and the actual next-l
   assert.equal(getChoiceNextEffect(upgrade, game.state), '+30% de dano por tiro.');
 
   const power = POWERS.find(item => item.key === 'charged');
+  game.state.powerBonuses = { charged: 1 };
+  assert.deepEqual(getChoiceProgress(power, game.state), { current: null, next: null, max: null, label: 'ATIVAÇÃO ÚNICA' });
+  assert.match(getChoiceNextEffect(power, game.state), /15× dano base \(crítico incluso\)/);
   game.state.powers.charged = 1;
   game.state.powerBonuses = { charged: 1 };
-  assert.deepEqual(getChoiceProgress(power, game.state), { current: 1, next: 3, max: 4, label: 'HABILIDADE' });
-  assert.match(getChoiceNextEffect(power, game.state), /\+2× dano base/);
+  assert.equal(getChoiceProgress(power, game.state).label, 'ATIVAÇÃO ÚNICA');
 });
 
 test('companion choice preview reports only the selected ally and its rank gain', () => {
@@ -74,22 +113,41 @@ test('level-up choices mix unlocked powers and regular skills while excluding ma
 
   game.levelUp();
 
-  assert.deepEqual(new Set(game.lastChoices.map(choice => choice.key)), new Set(['damage', 'aimbot', 'companion']));
+  assert.deepEqual(new Set(game.lastChoices.map(choice => choice.key)), new Set(['damage', 'companion']));
   assert.equal(game.lastChoices.some(choice => choice.key === 'shield'), false);
+  assert.equal(game.lastChoices.some(choice => choice.key === 'aimbot'), false);
   assert.equal(game.lastChoices.some(choice => choice.apply && (game.state.upgradeLevels[choice.key] ?? 0) >= choice.maxLevel), false);
 });
 
-test('a power at run cap is filtered, and a permanent bonus cannot push it past the cap', () => {
+test('each superpower is acquired once per run, with potency set by its Hangar level', () => {
   const game = createHarness();
   game.profile.unlockedSkills = ['shield', 'charged'];
   game.state.powers.shield = 3;
-  game.state.powers.charged = 4;
   game.state.powerBonuses = { charged: 2 };
   assert.deepEqual(game.availableRunPowers().map(power => power.key), ['charged']);
 
   game.grantPower(POWERS.find(power => power.key === 'charged'));
-  assert.equal(game.state.powers.charged, 5);
+  assert.equal(game.state.powers.charged, 3);
   assert.deepEqual(game.availableRunPowers(), []);
+  game.state.chargeTimer = 4;
+  game.grantPower(POWERS.find(power => power.key === 'charged'));
+  assert.equal(game.state.powers.charged, 3);
+  assert.equal(game.state.chargeTimer, 4);
+});
+
+test('Hangar rank powers a superpower, while negative attribute tradeoffs scale only with Hangar purchases', () => {
+  const game = createHarness();
+  game.state.powerBonuses = { nova: 2, aimbot: 0 };
+  const nova = POWERS.find(power => power.key === 'nova');
+  assert.match(getChoiceNextEffect(nova, game.state), /custa 10 de vida máxima/);
+  game.grantPower(nova);
+  assert.equal(game.state.powers.nova, 3);
+  assert.equal(game.state.player.maxHp, 90);
+
+  const startingRate = game.state.player.rate;
+  game.grantPower(POWERS.find(power => power.key === 'aimbot'));
+  assert.equal(game.state.powers.aimbot, 1);
+  assert.equal(game.state.player.rate, startingRate);
 });
 
 test('hangar purchases and in-run power choices use separate catalogs', () => {
@@ -100,6 +158,7 @@ test('hangar purchases and in-run power choices use separate catalogs', () => {
   assert.equal(runPower, POWERS.find(power => power.key === 'shield'));
   assert.notEqual(runPower, permanentUpgrade);
   assert.equal('baseCost' in runPower, false);
+  assert.equal('runMaxLevel' in runPower, false);
   assert.equal('runMaxLevel' in permanentUpgrade, false);
 });
 
@@ -127,6 +186,7 @@ test('level-up restores half the existing maximum without increasing it', () => 
 
 test('regular level choices apply their player upgrade instead of becoming superpowers', () => {
   const game = createHarness();
+  game.state.mode = 'choice';
   game.applyChoice(UPGRADES.find(upgrade => upgrade.key === 'damage'));
   assert.equal(game.state.player.damage, 19 * 1.3);
   assert.equal(game.state.upgradeLevels.damage, 1);
@@ -135,6 +195,7 @@ test('regular level choices apply their player upgrade instead of becoming super
 
 test('repair is no longer an upgrade choice; hull reinforcement raises only maximum HP', () => {
   const game = createHarness();
+  game.state.mode = 'choice';
   game.state.player.hp = 40;
   game.applyChoice(UPGRADES.find(upgrade => upgrade.key === 'hull'));
   assert.equal(game.state.player.maxHp, 130);
@@ -194,7 +255,7 @@ test('enemy and mini-boss archetypes unlock one new type per defeated Guardian',
 test('permanent upgrades cap at level 10 and companion ranks cap at level 5 per ally', () => {
   assert.ok(SHIP_UPGRADES.every(upgrade => upgrade.maxLevel === MAX_PERMANENT_UPGRADE_LEVEL));
   assert.ok(PERMANENT_POWER_UPGRADES.every(upgrade => upgrade.maxLevel === MAX_PERMANENT_UPGRADE_LEVEL));
-  assert.ok(POWERS.every(power => !('baseCost' in power) && !('maxLevel' in power)));
+  assert.ok(POWERS.every(power => !('baseCost' in power) && !('maxLevel' in power) && !('runMaxLevel' in power)));
   assert.equal(PERMANENT_POWER_UPGRADES.some(upgrade => upgrade.key === 'companion'), false);
   assert.equal(MAX_COMPANION_LEVEL, 5);
   const clampedProfile = normalizeProfile({ shipUpgrades: { hull: 99 }, superpowerUpgrades: { shield: 99 } });
@@ -362,11 +423,297 @@ test('charged shots explode on asteroids and produce a readable effect ring', ()
   assert.ok(game.state.entities.rings.some(ring => ring.kind === 'charged'));
 });
 
-test('level-up hordes respect the increased browser enemy population ceiling', () => {
+test('normal waves use a 10% lower enemy flow and population cap', () => {
   const game = createHarness();
-  game.state.entities.enemies = Array.from({ length: 95 }, () => ({}));
+  game.state.entities.enemies = Array.from({ length: 19 }, () => ({}));
+  game.state.spawnTimer = .1;
+  let spawned = 0;
+  game.spawn = () => { spawned += 1; };
+  game.spawnEnemies(.2);
+  assert.equal(spawned, 0);
+  assert.equal(RUN_RULES.enemySpawnScale, .9);
+});
+
+test('level-up hordes spawn about 10% fewer enemies and respect the adjusted ceiling', () => {
+  const game = createHarness();
+  game.state.entities.enemies = Array.from({ length: 85 }, () => ({}));
   let spawned = 0;
   game.spawn = () => { spawned += 1; };
   game.levelUp();
   assert.equal(spawned, 1);
+
+  const freshRun = createHarness();
+  let hordeSize = 0;
+  freshRun.spawn = () => { hordeSize += 1; };
+  freshRun.levelUp();
+  assert.equal(hordeSize, 15);
+  assert.equal(RUN_RULES.enemyCap, 86);
+});
+
+test('consumed choices cannot be applied again during play, pause, or after death', () => {
+  const game = createHarness();
+  const choice = UPGRADES.find(upgrade => upgrade.key === 'damage');
+  game.state.mode = 'choice';
+  game.applyChoice(choice);
+  const damage = game.state.player.damage;
+  for (const mode of ['playing', 'paused', 'dead']) {
+    game.state.mode = mode;
+    game.applyChoice(choice);
+    game.finishChoice();
+    assert.equal(game.state.player.damage, damage);
+    assert.equal(game.state.mode, mode);
+  }
+});
+
+test('choice UI invalidates old buttons even when a new choice opens immediately', () => {
+  const previousDocument = globalThis.document;
+  globalThis.document = { createElement: () => ({ setAttribute() {}, addEventListener(_event, callback) { this.click = callback; } }) };
+  try {
+    const ui = Object.create(UIController.prototype);
+    const state = createGameState(1024, 768);
+    state.mode = 'choice';
+    ui.pauseButton = { classList: { add() {} } };
+    ui.choiceHint = {};
+    ui.choiceScreen = { classList: { contains: () => false } };
+    ui.choiceGrid = { children: [], replaceChildren() { this.children = []; }, append(child) { this.children.push(child); } };
+    const choice = UPGRADES.find(item => item.key === 'damage');
+    let chosen = 0;
+    ui.renderChoices([choice], state, () => {
+      chosen += 1;
+      ui.renderChoices([choice], state, () => { chosen += 1; });
+    });
+    const oldButton = ui.choiceGrid.children[0];
+    oldButton.click();
+    oldButton.click();
+    assert.equal(chosen, 1);
+    ui.chooseByIndex(0);
+    ui.chooseByIndex(0);
+    assert.equal(chosen, 2);
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});
+
+test('only the intercepting companion stops shooting for two seconds', () => {
+  const game = createHarness();
+  game.addCompanion(COMPANION_MODELS.find(model => model.id === 'scout'), 5);
+  game.addCompanion(COMPANION_MODELS.find(model => model.id === 'striker'), 5);
+  const [interceptor, other] = game.state.companions;
+  game.state.entities.enemyBullets.push({ x: interceptor.x, y: interceptor.y, vx: 0, vy: 0, radius: 5, damage: 10, life: 3 });
+  game.updateEnemyBullets(.016);
+  assert.equal(interceptor.disabledTimer, 2);
+  assert.equal(other.disabledTimer, 0);
+  assert.equal(game.state.entities.enemyBullets.length, 0);
+  game.updateCompanions(1);
+  assert.equal(interceptor.disabledTimer, 1);
+  game.updateCompanions(1);
+  assert.equal(interceptor.disabledTimer, 0);
+});
+
+test('pause toggles the accessible control and cannot bypass a reward screen', () => {
+  const game = createHarness();
+  let paused;
+  game.ui.setPaused = value => { paused = value; };
+  game.togglePause();
+  assert.equal(game.state.mode, 'paused');
+  assert.equal(paused, true);
+  game.togglePause();
+  assert.equal(game.state.mode, 'playing');
+  assert.equal(paused, false);
+  game.state.mode = 'choice';
+  game.togglePause();
+  assert.equal(game.state.mode, 'choice');
+});
+
+test('maxed skills cannot be upgraded through a stale choice', () => {
+  const game = createHarness();
+  const choice = UPGRADES.find(upgrade => upgrade.key === 'damage');
+  game.state.mode = 'choice';
+  game.state.upgradeLevels.damage = choice.maxLevel;
+  game.applyChoice(choice);
+  assert.equal(game.state.player.damage, 19);
+  assert.equal(game.state.upgradeLevels.damage, choice.maxLevel);
+});
+
+test('fatal hazards stop the frame before healing, XP collection, and enemy spawning', () => {
+  const game = createHarness();
+  const { player, entities } = game.state;
+  let endScreens = 0;
+  game.ui.showGameOver = () => { endScreens += 1; };
+  player.hp = 1;
+  entities.mines.push({ x: player.x, y: player.y, life: 5, armTime: 0, triggerRadius: 40, blastRadius: 80, damage: 50 });
+  entities.heals.push({ x: player.x, y: player.y, radius: 16, life: 10 });
+  entities.gems.push({ x: player.x, y: player.y, value: 999 });
+  game.spawnEnemies = () => assert.fail('spawn after death');
+  game.update(.016);
+  game.finishRun('victory');
+  game.hurt(10);
+  assert.equal(player.hp, 0);
+  assert.equal(game.state.xp, 0);
+  assert.equal(game.state.outcome, 'defeat');
+  assert.equal(endScreens, 1);
+});
+
+test('both max-rank shields have a full vulnerable recharge window', () => {
+  for (const manual of [false, true]) {
+    const game = createHarness();
+    const key = manual ? 'activeShield' : 'shield';
+    const timeKey = manual ? 'activeShieldTime' : 'shieldTime';
+    const cooldownKey = manual ? 'activeShieldCooldown' : 'shieldCooldown';
+    game.state.powerBonuses = { [key]: 10 };
+    game.grantPower({ key });
+    if (manual) game.activateShield();
+    const { duration, cooldown } = shieldStats(11, manual);
+    game.updatePowers(duration);
+    assert.equal(game.state[timeKey], 0);
+    assert.equal(game.state[cooldownKey], cooldown);
+    game.hurt(10);
+    assert.equal(game.state.player.hp, 90);
+    game.updatePowers(cooldown - .1);
+    if (manual) game.activateShield();
+    assert.equal(game.state[timeKey], 0);
+    game.updatePowers(.2);
+    if (manual) game.activateShield();
+    assert.ok(game.state[timeKey] > 0);
+  }
+});
+
+test('Hangar ranks and repeated companion upgrades do not inflate enemy pressure', () => {
+  const game = createHarness();
+  game.state.powers.shield = 1;
+  const base = game.threatLevel();
+  game.state.powers.shield = 11;
+  game.state.powers.companion = 25;
+  assert.equal(game.threatLevel(), base);
+  game.state.powers.nova = 1;
+  assert.ok(game.threatLevel() > base);
+});
+
+test('overdrive never slows an already fast cannon and previews the applied gain', () => {
+  const game = createHarness();
+  game.state.player.rate = .075;
+  const preview = getChoiceNextEffect(POWERS.find(power => power.key === 'overdrive'), game.state);
+  game.grantPower({ key: 'overdrive' });
+  assert.equal(game.state.player.rate, .07);
+  assert.match(preview, /\+7,1% de cadência/);
+});
+
+test('swept collision finds crossings, stationary overlaps, tangencies, and misses', () => {
+  const target = { x: 50, y: 0 };
+  assert.equal(segmentCircleEntry(0, 0, 100, 0, target, 10), .4);
+  assert.equal(segmentCircleEntry(50, 0, 50, 0, target, 10), 0);
+  assert.equal(segmentCircleEntry(0, 10, 100, 10, target, 10), .5);
+  assert.equal(segmentCircleEntry(0, 11, 100, 11, target, 10), null);
+  assert.equal(segmentCircleEntry(0, 0, -100, 0, target, 10), null);
+});
+
+test('fast projectiles hit the first living target along their path, not array order', () => {
+  const game = createHarness();
+  const enemy = x => ({ x, y: 100, radius: 9, hp: 100, slow: 0, color: '#fff' });
+  const near = enemy(50); const far = enemy(85); const dead = { ...enemy(25), hp: 0 };
+  game.state.entities.enemies.push(far, dead, near);
+  game.state.entities.bullets.push({ x: 0, y: 100, vx: 3000, vy: 0, life: 1, radius: 4, damage: 10, hit: new Set(), pierce: 0, slow: 0 });
+  game.updateBullets(.04);
+  assert.equal(near.hp, 90);
+  assert.equal(far.hp, 100);
+  assert.equal(dead.hp, 0);
+  assert.equal(game.state.entities.bullets.length, 0);
+  assert.equal(game.nearestEnemy({ x: 0, y: 100 }), near);
+});
+
+test('incoming asteroids are retained until they exit and full-health drops are not wasted', () => {
+  const game = createHarness();
+  const { player, entities } = game.state;
+  entities.asteroids.push({ x: -160, y: 50, vx: 300, vy: 0, spin: 0, radius: 24 });
+  entities.heals.push({ x: player.x, y: player.y, radius: 16, life: 10 });
+  game.updateWorldHazards(.04);
+  assert.equal(entities.asteroids.length, 1);
+  assert.equal(entities.heals.length, 1);
+  player.hp = 80;
+  entities.asteroids[0].x = 1200;
+  game.updateWorldHazards(.04);
+  assert.equal(entities.asteroids.length, 0);
+  assert.equal(entities.heals.length, 0);
+  assert.equal(player.hp, 100);
+});
+
+test('large magnets collect nearby XP without overshooting on a slow frame', () => {
+  const game = createHarness();
+  game.state.player.magnet = 425;
+  game.state.entities.gems.push({ x: game.state.player.x + 25, y: game.state.player.y, value: 3 });
+  game.collectGems(.04);
+  assert.equal(game.state.entities.gems.length, 0);
+  assert.equal(game.state.xp, 3);
+});
+
+test('boss rewards resume at the campaign cap even with surplus XP', () => {
+  const game = createHarness();
+  game.state.level = MAX_RUN_LEVEL;
+  game.state.xp = 999;
+  game.state.pendingBossRewards = 1;
+  game.state.mode = 'choice';
+  game.finishBossReward();
+  assert.equal(game.state.mode, 'playing');
+  game.finishBossReward({ key: 'nova' });
+  assert.equal(game.state.powers.nova, 0);
+});
+
+test('profile normalization rejects non-finite values, fractional ranks, and unknown skills', () => {
+  assert.deepEqual(normalizeProfile(null), createDefaultProfile());
+  const profile = normalizeProfile({ credits: Infinity, careerLevel: 3.7, bestLevel: NaN, runs: -1, shipUpgrades: { hull: 2.9, engine: Infinity }, superpowerUpgrades: { shield: 999 }, unlockedSkills: ['shield', 'unknown'] });
+  assert.equal(profile.credits, 0);
+  assert.equal(profile.careerLevel, 3);
+  assert.equal(profile.bestLevel, 3);
+  assert.equal(profile.runs, 0);
+  assert.equal(profile.shipUpgrades.hull, 2);
+  assert.equal(profile.shipUpgrades.engine, 0);
+  assert.equal(profile.superpowerUpgrades.shield, 10);
+  assert.ok(!profile.unlockedSkills.includes('unknown'));
+});
+
+test('late waves apply the population reduction once and stop at the shared cap', () => {
+  const game = createHarness();
+  game.state.wave = 20;
+  game.state.level = 32;
+  game.state.entities.enemies = Array.from({ length: 85 }, () => ({}));
+  game.spawn = () => game.state.entities.enemies.push({});
+  game.spawnEnemies(.1);
+  assert.equal(game.state.entities.enemies.length, 86);
+  game.spawnEnemies(1);
+  assert.equal(game.state.entities.enemies.length, 86);
+});
+
+test('seeded combat simulation keeps early, mid, and max-rank builds finite and bounded', () => {
+  const originalRandom = Math.random;
+  let seed = 237;
+  Math.random = () => { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; };
+  try {
+    for (const level of [1, 16, 32]) {
+      const game = createHarness();
+      game.spawn = Game.prototype.spawn;
+      game.burst = Game.prototype.burst;
+      game.label = Game.prototype.label;
+      game.state.level = level;
+      game.state.bossesDefeated = Math.floor((level - 1) / 4);
+      game.state.nextXp = Number.MAX_SAFE_INTEGER;
+      if (level > 1) {
+        game.state.powerBonuses = Object.fromEntries(POWERS.filter(power => power.key !== 'companion').map(power => [power.key, level === 32 ? 10 : 3]));
+        for (const power of POWERS.filter(power => power.key !== 'companion')) game.grantPower(power);
+        for (const model of COMPANION_MODELS.slice(0, 3)) game.addCompanion(model, 5);
+        game.state.player.shots = 6;
+      }
+      for (let frame = 0; frame < 3600; frame += 1) {
+        // Invulnerability isolates long-running simulation health from player skill.
+        game.state.player.invulnerable = 100;
+        game.update(1 / 60);
+        assert.equal(game.state.mode, 'playing');
+        assert.ok(game.state.entities.enemies.length <= RUN_RULES.enemyCap);
+        assert.ok(game.state.entities.particles.length <= 430);
+        for (const entity of [game.state.player, ...Object.values(game.state.entities).flat()]) {
+          assert.ok(Number.isFinite(entity.x) && Number.isFinite(entity.y));
+        }
+      }
+    }
+  } finally { Math.random = originalRandom; }
 });

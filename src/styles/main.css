@@ -81,6 +81,8 @@ kbd { padding: 5px 9px; border: 1px solid #547399; border-bottom-width: 3px; bor
 .choice__progress--new { justify-content: space-between; color: #8dfff0; }
 .choice__progress--new > span { color: #8dfff0; font-size: 9px; font-weight: 900; letter-spacing: .1em; }
 .choice__progress--new b { color: #c6fff2; }
+.choice__progress--activation { flex-wrap: wrap; border-color: #806d4c; background: #211c2b; }
+.choice__progress--activation > small { width: 100%; color: #e7bd70; font-size: 8px; font-weight: 850; letter-spacing: .08em; }
 .choice__next { display: flex; width: 100%; flex-direction: column; gap: 5px; margin-top: 8px; padding: 9px; border-left: 2px solid #48d5ee; border-radius: 0 8px 8px 0; background: #092338b8; }
 .choice__next small { color: #73d9eb; font-size: 8px; font-weight: 900; letter-spacing: .1em; }
 .choice__next > span { color: #d2e9f5; font-size: 11px; line-height: 1.4; }
@@ -228,3 +230,8 @@ kbd { padding: 5px 9px; border: 1px solid #547399; border-bottom-width: 3px; bor
 @media (pointer: coarse) and (min-width: 701px) {
   .choice { min-height: 120px; }
 }
+
+.pause-control { position: fixed; top: 25px; left: 50%; transform: translateX(-50%); z-index: 4; min-height: 44px; padding: 0 14px; border: 1px solid #407590; border-radius: 6px; background: #081426eb; color: #bfeeff; font: 700 11px system-ui; letter-spacing: .08em; cursor: pointer; }
+.pause-control:hover, .pause-control[aria-pressed="true"] { border-color: #ffd34f; color: #ffd34f; }
+.pause-control:focus-visible { outline: 2px solid #6ee6ff; outline-offset: 3px; }
+@media (max-width: 760px) { .pause-control { top: auto; bottom: 20px; } }

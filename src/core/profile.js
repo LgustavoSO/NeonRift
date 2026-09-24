@@ -2,6 +2,10 @@ import { MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS } from '../data/hangar.js';
 import { PERMANENT_POWER_UPGRADES } from '../data/upgrades.js';
 
 const PROFILE_KEY = 'neon-rift-profile-v1';
+const integer = (value, fallback = 0, min = 0, max = Number.MAX_SAFE_INTEGER) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(min, Math.min(max, Math.floor(number))) : fallback;
+};
 
 export function createDefaultProfile() {
   return {
@@ -17,18 +21,20 @@ export function createDefaultProfile() {
 }
 
 export function normalizeProfile(profile = {}) {
+  if (!profile || typeof profile !== 'object') profile = {};
   const defaults = createDefaultProfile();
-  const careerLevel = Math.max(1, Math.min(MAX_RUN_LEVEL, Number(profile.careerLevel) || 1));
-  const unlockedSkills = new Set(Array.isArray(profile.unlockedSkills) ? profile.unlockedSkills : defaults.unlockedSkills);
+  const careerLevel = integer(profile.careerLevel, 1, 1, MAX_RUN_LEVEL);
+  const validSkills = new Set(SKILL_UNLOCKS.map(skill => skill.key));
+  const unlockedSkills = new Set((Array.isArray(profile.unlockedSkills) ? profile.unlockedSkills : defaults.unlockedSkills).filter(key => validSkills.has(key)));
   for (const skill of SKILL_UNLOCKS) if (skill.level <= careerLevel) unlockedSkills.add(skill.key);
   return {
     version: 2,
-    credits: Math.max(0, Math.floor(Number(profile.credits) || 0)),
+    credits: integer(profile.credits),
     careerLevel,
-    bestLevel: Math.max(careerLevel, Math.min(MAX_RUN_LEVEL, Number(profile.bestLevel) || 1)),
-    runs: Math.max(0, Math.floor(Number(profile.runs) || 0)),
-    shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.shipUpgrades?.[key]) || 0))])),
-    superpowerUpgrades: Object.fromEntries(PERMANENT_POWER_UPGRADES.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.superpowerUpgrades?.[key]) || 0))])),
+    bestLevel: Math.max(careerLevel, integer(profile.bestLevel, 1, 1, MAX_RUN_LEVEL)),
+    runs: integer(profile.runs),
+    shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key, maxLevel }) => [key, integer(profile.shipUpgrades?.[key], 0, 0, maxLevel)])),
+    superpowerUpgrades: Object.fromEntries(PERMANENT_POWER_UPGRADES.map(({ key, maxLevel }) => [key, integer(profile.superpowerUpgrades?.[key], 0, 0, maxLevel)])),
     unlockedSkills: [...unlockedSkills],
   };
 }
@@ -69,7 +75,7 @@ export function buySuperpowerUpgrade(profile, key) {
 
 export function rewardLevel(profile, level) {
   const next = normalizeProfile(profile);
-  const clampedLevel = Math.max(1, Math.min(MAX_RUN_LEVEL, Number(level) || 1));
+  const clampedLevel = integer(level, 1, 1, MAX_RUN_LEVEL);
   const unlocked = [];
   for (const skill of SKILL_UNLOCKS) {
     if (skill.level === clampedLevel && !next.unlockedSkills.includes(skill.key)) {
