@@ -10,6 +10,8 @@ const input = new InputController(
   document.querySelector('#dash-touch'),
   document.querySelector('#joystick'),
   document.querySelector('#joystick-nub'),
+  document.querySelector('#teleport-touch'),
+  document.querySelector('#shield-touch'),
 );
 const ui = new UIController();
 

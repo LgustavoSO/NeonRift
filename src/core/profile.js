@@ -1,27 +1,35 @@
-import { COMPANION_MODELS, MAX_EQUIPPED_COMPANIONS, SHIP_UPGRADES, SKILL_UNLOCKS } from '../data/hangar.js';
+import { MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS } from '../data/hangar.js';
+import { POWERS } from '../data/upgrades.js';
 
 const PROFILE_KEY = 'neon-rift-profile-v1';
 
 export function createDefaultProfile() {
-  return { version: 1, credits: 0, careerLevel: 1, bestLevel: 1, runs: 0, shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key }) => [key, 0])), ownedCompanions: [], companionLevels: Object.fromEntries(COMPANION_MODELS.map(({ id }) => [id, 1])), equippedCompanions: [], unlockedSkills: ['shield'] };
+  return {
+    version: 2,
+    credits: 0,
+    careerLevel: 1,
+    bestLevel: 1,
+    runs: 0,
+    shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key }) => [key, 0])),
+    superpowerUpgrades: Object.fromEntries(POWERS.map(({ key }) => [key, 0])),
+    unlockedSkills: ['shield'],
+  };
 }
 
 export function normalizeProfile(profile = {}) {
   const defaults = createDefaultProfile();
-  const validCompanions = new Set(COMPANION_MODELS.map(({ id }) => id));
-  const ownedCompanions = [...new Set((Array.isArray(profile.ownedCompanions) ? profile.ownedCompanions : []).filter(id => validCompanions.has(id)))];
-  const equippedCompanions = [...new Set((Array.isArray(profile.equippedCompanions) ? profile.equippedCompanions : []).filter(id => ownedCompanions.includes(id)))].slice(0, MAX_EQUIPPED_COMPANIONS);
-  const careerLevel = Math.max(1, Math.min(20, Number(profile.careerLevel) || 1));
+  const careerLevel = Math.max(1, Math.min(MAX_RUN_LEVEL, Number(profile.careerLevel) || 1));
   const unlockedSkills = new Set(Array.isArray(profile.unlockedSkills) ? profile.unlockedSkills : defaults.unlockedSkills);
   for (const skill of SKILL_UNLOCKS) if (skill.level <= careerLevel) unlockedSkills.add(skill.key);
   return {
-    ...defaults, ...profile, version: 1,
-    credits: Math.max(0, Math.floor(Number(profile.credits) || 0)), careerLevel,
-    bestLevel: Math.max(careerLevel, Math.min(20, Number(profile.bestLevel) || 1)),
+    version: 2,
+    credits: Math.max(0, Math.floor(Number(profile.credits) || 0)),
+    careerLevel,
+    bestLevel: Math.max(careerLevel, Math.min(MAX_RUN_LEVEL, Number(profile.bestLevel) || 1)),
     runs: Math.max(0, Math.floor(Number(profile.runs) || 0)),
     shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.shipUpgrades?.[key]) || 0))])),
-    companionLevels: Object.fromEntries(COMPANION_MODELS.map(({ id, maxLevel = 5 }) => [id, Math.max(1, Math.min(maxLevel, Number(profile.companionLevels?.[id]) || 1))])),
-    ownedCompanions, equippedCompanions, unlockedSkills: [...unlockedSkills],
+    superpowerUpgrades: Object.fromEntries(POWERS.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.superpowerUpgrades?.[key]) || 0))])),
+    unlockedSkills: [...unlockedSkills],
   };
 }
 
@@ -39,52 +47,29 @@ export function upgradeCost(definition, level) {
   return Math.ceil(definition.baseCost * 1.55 ** level);
 }
 
-export function buyShipUpgrade(profile, key) {
+function buyUpgrade(profile, key, definitions, field, canBuy = () => true) {
   const next = normalizeProfile(profile);
-  const definition = SHIP_UPGRADES.find(item => item.key === key);
-  const level = next.shipUpgrades[key] ?? 0;
-  if (!definition || level >= definition.maxLevel) return { profile: next, ok: false };
+  const definition = definitions.find(item => item.key === key);
+  const level = next[field][key] ?? 0;
+  if (!definition || level >= definition.maxLevel || !canBuy(next, key)) return { profile: next, ok: false };
   const cost = upgradeCost(definition, level);
   if (next.credits < cost) return { profile: next, ok: false };
   next.credits -= cost;
-  next.shipUpgrades[key] = level + 1;
+  next[field][key] = level + 1;
   return { profile: next, ok: true };
 }
 
-export function buyCompanion(profile, id) {
-  const next = normalizeProfile(profile);
-  const companion = COMPANION_MODELS.find(item => item.id === id);
-  if (!companion || next.ownedCompanions.includes(id) || next.credits < companion.cost) return { profile: next, ok: false };
-  next.credits -= companion.cost;
-  next.ownedCompanions.push(id);
-  if (next.equippedCompanions.length < MAX_EQUIPPED_COMPANIONS) next.equippedCompanions.push(id);
-  return { profile: next, ok: true };
+export function buyShipUpgrade(profile, key) {
+  return buyUpgrade(profile, key, SHIP_UPGRADES, 'shipUpgrades');
 }
 
-export function upgradeCompanion(profile, id) {
-  const next = normalizeProfile(profile);
-  const companion = COMPANION_MODELS.find(item => item.id === id);
-  const level = next.companionLevels[id] ?? 1;
-  if (!companion || !next.ownedCompanions.includes(id) || level >= companion.maxLevel) return { profile: next, ok: false };
-  const cost = Math.ceil(companion.upgradeCost * 1.55 ** (level - 1));
-  if (next.credits < cost) return { profile: next, ok: false };
-  next.credits -= cost;
-  next.companionLevels[id] = level + 1;
-  return { profile: next, ok: true };
-}
-
-export function toggleCompanion(profile, id) {
-  const next = normalizeProfile(profile);
-  if (!next.ownedCompanions.includes(id)) return { profile: next, ok: false };
-  if (next.equippedCompanions.includes(id)) next.equippedCompanions = next.equippedCompanions.filter(item => item !== id);
-  else if (next.equippedCompanions.length < MAX_EQUIPPED_COMPANIONS) next.equippedCompanions.push(id);
-  else return { profile: next, ok: false };
-  return { profile: next, ok: true };
+export function buySuperpowerUpgrade(profile, key) {
+  return buyUpgrade(profile, key, POWERS, 'superpowerUpgrades', (next, powerKey) => next.unlockedSkills.includes(powerKey));
 }
 
 export function rewardLevel(profile, level) {
   const next = normalizeProfile(profile);
-  const clampedLevel = Math.max(1, Math.min(20, level));
+  const clampedLevel = Math.max(1, Math.min(MAX_RUN_LEVEL, Number(level) || 1));
   const unlocked = [];
   for (const skill of SKILL_UNLOCKS) {
     if (skill.level === clampedLevel && !next.unlockedSkills.includes(skill.key)) {

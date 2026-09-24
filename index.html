@@ -13,23 +13,46 @@
 
       <div class="touch-controls" aria-label="Controles de toque">
         <div class="joystick" id="joystick"><div class="joystick__nub" id="joystick-nub"></div></div>
-        <button class="touch-controls__dash" id="dash-touch" type="button">DASH</button>
+        <div class="touch-controls__actions">
+          <button class="touch-controls__utility" id="shield-touch" type="button" aria-label="Ativar barreira">E · ESCUDO</button>
+          <button class="touch-controls__utility" id="teleport-touch" type="button" aria-label="Ativar salto de fase">Q · SALTO</button>
+          <button class="touch-controls__dash" id="dash-touch" type="button">DASH</button>
+        </div>
       </div>
 
       <section class="screen screen--menu" id="menu-screen" aria-labelledby="menu-title">
         <div class="panel panel--hero">
-          <span class="eyebrow">um pequeno universo em expansão</span>
-          <h1 id="menu-title">NEON<br />RIFT</h1>
-          <p>Sobreviva, reúna créditos e prepare sua nave no hangar. Alcance o nível 20 para concluir a primeira etapa — depois, tente sobreviver o máximo possível.</p>
-          <div class="meta-strip" id="menu-meta"></div>
-          <div class="key-list">
-            <span><kbd>W A S D</kbd> mover</span>
-            <span><kbd>Mouse</kbd> mirar</span>
-            <span><kbd>Espaço</kbd> impulso</span>
-            <span><kbd>P</kbd> pausa</span>
+          <div class="hero-layout">
+            <div class="hero-primary">
+              <span class="eyebrow">um pequeno universo em expansão</span>
+              <h1 id="menu-title">NEON<br /><span>RIFT</span></h1>
+              <p class="hero-description">Sobreviva às hordas, reúna créditos e prepare sua nave entre as expedições.</p>
+              <div class="meta-strip" id="menu-meta" aria-label="Resumo da carreira"></div>
+              <div class="menu-actions"><button class="primary-button" id="play-button" type="button">ENTRAR NA ARENA <span>→</span></button><button class="secondary-button" id="hangar-button" type="button">ABRIR HANGAR</button></div>
+              <p class="hint">Sua nave dispara automaticamente. Clique esquerdo libera um tiro carregado quando disponível.</p>
+            </div>
+            <aside class="menu-briefing" aria-label="Missão e controles">
+              <section class="mission-card" aria-labelledby="mission-title">
+                <span class="mission-card__label"><span></span> MISSÃO · ETAPA 01</span>
+                <div class="mission-card__target"><strong>32</strong><span>NÍVEIS<br />DE SOBREVIVÊNCIA</span></div>
+                <h2 id="mission-title">Chegue ao Núcleo</h2>
+                <p>Enfrente os guardiões, evolua durante a partida e destrua o chefe final para concluir a etapa.</p>
+                <div class="mission-track" aria-hidden="true"><span></span></div>
+                <span class="mission-card__foot">OBJETIVO FINAL <b>NÚCLEO DO RIFT</b></span>
+              </section>
+              <section class="controls-card" aria-labelledby="controls-title">
+                <div class="controls-card__heading"><span class="controls-card__icon" aria-hidden="true">⌘</span><div><span class="mission-card__label">MANUAL DE VOO</span><h2 id="controls-title">Controles</h2></div></div>
+                <div class="key-list">
+                  <span><kbd>W A S D</kbd> mover</span>
+                  <span><kbd>Mouse</kbd> mirar</span>
+                  <span><kbd>Espaço</kbd> impulso</span>
+                  <span><kbd>Q</kbd> salto de fase</span>
+                  <span><kbd>E</kbd> barreira</span>
+                  <span><kbd>P</kbd> pausar</span>
+                </div>
+              </section>
+            </aside>
           </div>
-          <div class="menu-actions"><button class="secondary-button" id="hangar-button" type="button">ABRIR HANGAR</button><button class="primary-button" id="play-button" type="button">ENTRAR NA ARENA <span>→</span></button></div>
-          <p class="hint">Mire com o mouse; os tiros saem automaticamente. Clique esquerdo dispara um tiro carregado quando disponível.</p>
         </div>
       </section>
 
@@ -40,9 +63,10 @@
           <div class="meta-strip" id="hangar-meta"></div>
           <h3>Melhorias permanentes da nave</h3>
           <div class="hangar-grid" id="ship-upgrades"></div>
-          <h3>Companheiros · equipe até 2</h3>
-          <div class="hangar-grid" id="companion-shop"></div>
-          <h3>Habilidades desbloqueadas por nível</h3>
+          <h3>Superpoderes · melhorias permanentes</h3>
+          <p class="hint">Desbloqueie poderes avançando na carreira e invista créditos para aumentar sua eficiência durante as expedições.</p>
+          <div class="hangar-grid" id="superpower-upgrades"></div>
+          <h3>Desbloqueios da carreira</h3>
           <div class="skill-list" id="skill-unlocks"></div>
           <div class="menu-actions"><button class="secondary-button" id="hangar-back" type="button">VOLTAR</button><button class="primary-button" id="hangar-start" type="button">INICIAR EXPEDIÇÃO <span>→</span></button></div>
         </div>
@@ -53,15 +77,20 @@
           <span class="eyebrow" id="choice-eyebrow">evolução</span>
           <h2 id="choice-title">Escolha uma melhoria</h2>
           <div class="choice-grid" id="choice-grid"></div>
-          <p class="hint">Teclas 1, 2 ou 3 também funcionam</p>
+          <div class="choice-footer"><p class="hint">Teclas numéricas também funcionam</p></div>
         </div>
       </section>
 
       <section class="screen screen--choice is-hidden" id="end-screen" aria-labelledby="end-title">
-        <div class="panel">
-          <span class="eyebrow" id="end-eyebrow">transmissão encerrada</span>
-          <h2 id="end-title">A arena venceu desta vez</h2>
-          <p id="end-stats"></p>
+        <div class="panel panel--end">
+          <div class="end-heading">
+            <div>
+              <span class="eyebrow" id="end-eyebrow">transmissão encerrada</span>
+              <h2 id="end-title">A arena venceu desta vez</h2>
+            </div>
+            <span class="end-sigil" aria-hidden="true">NR</span>
+          </div>
+          <div id="end-stats" class="end-stats"></div>
           <div class="menu-actions"><button class="secondary-button" id="end-hangar-button" type="button">HANGAR</button><button class="primary-button" id="again-button" type="button">TENTAR NOVAMENTE <span>→</span></button></div>
         </div>
       </section>

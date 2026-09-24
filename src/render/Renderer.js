@@ -1,4 +1,5 @@
 import { TAU, clamp, hexagon } from '../core/math.js';
+import { TOTAL_BOSSES } from '../data/hangar.js';
 
 export class Renderer {
   constructor(canvas) {
@@ -77,10 +78,11 @@ export class Renderer {
   }
 
   drawWorld(context, state, pointer, now) {
-    const { asteroids, heals, rings, gems, bullets, enemyBullets, enemies, particles, floaters } = state.entities;
+    const { asteroids, heals, mines = [], rings, gems, bullets, enemyBullets, enemies, particles, floaters } = state.entities;
     const { player } = state;
     for (const asteroid of asteroids) this.drawAsteroid(context, asteroid);
     for (const heal of heals) this.drawHeal(context, heal, now);
+    for (const mine of mines) this.drawMine(context, mine, now);
     for (const ring of rings) this.drawRing(context, ring, now);
     for (const gem of gems) { context.shadowBlur = 14; context.shadowColor = '#6bffed'; context.fillStyle = '#69f8dd'; hexagon(context, gem.x, gem.y, gem.radius, now * .001); context.fill(); }
     for (const bullet of bullets) this.drawBullet(context, bullet);
@@ -120,6 +122,19 @@ export class Renderer {
     context.restore();
   }
 
+  drawMine(context, mine, now) {
+    const armed = mine.armTime <= 0;
+    const color = mine.friendly ? '#7dffe0' : '#ff795f';
+    const pulse = .5 + Math.sin(now * (armed ? .009 : .004)) * .5;
+    context.save(); context.translate(mine.x, mine.y); context.rotate(now * .0005);
+    context.globalAlpha = mine.friendly ? .9 : .82; context.shadowBlur = 18 + pulse * 10; context.shadowColor = color;
+    context.fillStyle = mine.friendly ? '#123f43' : '#401e35'; context.strokeStyle = color; context.lineWidth = 2;
+    context.beginPath(); context.arc(0, 0, 10 + pulse * 2, 0, TAU); context.fill(); context.stroke();
+    context.beginPath(); context.moveTo(0, -16); context.lineTo(4, -5); context.lineTo(15, 0); context.lineTo(4, 5); context.lineTo(0, 16); context.lineTo(-4, 5); context.lineTo(-15, 0); context.lineTo(-4, -5); context.closePath(); context.stroke();
+    if (armed) { context.globalAlpha = .14 + pulse * .12; context.beginPath(); context.arc(0, 0, mine.triggerRadius, 0, TAU); context.fillStyle = color; context.fill(); }
+    context.restore();
+  }
+
   drawRing(context, ring, now) {
     const progress = 1 - ring.life / ring.duration;
     context.save(); context.globalAlpha = clamp(ring.life / ring.duration, 0, 1); context.strokeStyle = ring.color; context.shadowBlur = 28; context.shadowColor = ring.color;
@@ -145,7 +160,7 @@ export class Renderer {
   drawPowerEffects(context, state, now) {
     const { player } = state;
     context.save(); context.translate(player.x, player.y);
-    if (state.shieldTime > 0) {
+    if (state.shieldTime > 0 || state.activeShieldTime > 0) {
       const pulse = Math.sin(now * .009) * 2; const alpha = .7 + .3 * Math.sin(now * .012);
       context.globalAlpha = alpha; context.strokeStyle = '#83ffc7'; context.shadowBlur = 24; context.shadowColor = '#59ffb4'; context.lineWidth = 2;
       context.beginPath(); context.arc(0, 0, 37 + pulse, 0, TAU); context.stroke();
@@ -168,7 +183,7 @@ export class Renderer {
     if (bullet.charged || bullet.overdrive || bullet.companionShot) { const speed = Math.hypot(bullet.vx, bullet.vy) || 1; context.strokeStyle = color; context.globalAlpha = .8; context.lineWidth = bullet.charged ? 5 : 2.5; context.beginPath(); context.moveTo(bullet.x, bullet.y); context.lineTo(bullet.x - bullet.vx / speed * (bullet.charged ? 32 : 15), bullet.y - bullet.vy / speed * (bullet.charged ? 32 : 15)); context.stroke(); }
     context.globalAlpha = 1; context.fillStyle = bullet.charged ? '#fff4c8' : color; context.beginPath(); context.arc(bullet.x, bullet.y, bullet.radius, 0, TAU); context.fill(); context.restore();
   }
-  drawEnemyBullet(context, bullet) { context.shadowBlur = 17; context.shadowColor = '#ff59b3'; context.fillStyle = '#ff8bd4'; context.beginPath(); context.arc(bullet.x, bullet.y, bullet.radius, 0, TAU); context.fill(); context.shadowBlur = 0; }
+  drawEnemyBullet(context, bullet) { const homing = bullet.homingTime > 0; const color = homing ? '#ffb66f' : '#ff8bd4'; context.save(); context.shadowBlur = homing ? 20 : 17; context.shadowColor = color; context.fillStyle = color; if (homing) { const speed = Math.hypot(bullet.vx, bullet.vy) || 1; context.beginPath(); context.moveTo(bullet.x, bullet.y); context.lineTo(bullet.x - bullet.vx / speed * 18, bullet.y - bullet.vy / speed * 18); context.lineWidth = 3; context.strokeStyle = color; context.stroke(); } context.beginPath(); context.arc(bullet.x, bullet.y, bullet.radius, 0, TAU); context.fill(); context.restore(); }
 
   drawTargetLock(context, target, now) {
     const radius = target.radius + 12 + Math.sin(now * .01) * 1.5;
@@ -268,6 +283,11 @@ export class Renderer {
       context.moveTo(0, -18); context.lineTo(6, -4); context.lineTo(3, 8); context.lineTo(0, 4); context.lineTo(-3, 8); context.lineTo(-6, -4); context.closePath();
     } else if (companion.modelId === 'bulwark') {
       context.moveTo(-11, -12); context.lineTo(11, -12); context.lineTo(10, 2); context.lineTo(0, 15); context.lineTo(-10, 2); context.closePath();
+    } else if (companion.modelId === 'reflector') {
+      context.moveTo(0, -19); context.lineTo(13, -4); context.lineTo(0, 15); context.lineTo(-13, -4); context.closePath();
+    } else if (companion.modelId === 'collector') {
+      context.roundRect(-12, -12, 24, 25, 6);
+      context.moveTo(-17, -4); context.lineTo(-11, -1); context.moveTo(17, -4); context.lineTo(11, -1);
     } else {
       context.moveTo(0, -13);
       context.quadraticCurveTo(8, -9, 17, 3);
@@ -287,6 +307,11 @@ export class Renderer {
     } else if (companion.modelId === 'bulwark') {
       context.beginPath(); context.arc(0, 0, 19, Math.PI * 1.08, Math.PI * 1.92); context.stroke();
       context.fillStyle = accent; context.beginPath(); context.arc(0, -19, 2.4, 0, TAU); context.fill();
+    } else if (companion.modelId === 'reflector') {
+      context.beginPath(); context.moveTo(-8, -4); context.lineTo(0, -11); context.lineTo(8, -4); context.moveTo(-8, 3); context.lineTo(0, 10); context.lineTo(8, 3); context.stroke();
+    } else if (companion.modelId === 'collector') {
+      context.beginPath(); context.arc(0, 0, 5, 0, TAU); context.stroke();
+      context.fillStyle = accent; context.fillRect(-4, 8, 8, 3);
     } else {
       context.beginPath(); context.moveTo(-12, 2); context.quadraticCurveTo(-5, -2, 0, 0); context.quadraticCurveTo(5, -2, 12, 2); context.stroke();
       context.beginPath(); context.moveTo(-13, -5); context.lineTo(-19, -10); context.lineTo(-17, -1); context.moveTo(13, -5); context.lineTo(19, -10); context.lineTo(17, -1); context.stroke();
@@ -306,7 +331,7 @@ export class Renderer {
     const { player } = state;
     const padding = width < 600 ? 13 : 25;
     const panelWidth = width < 600 ? Math.min(276, width - 26) : 300;
-    const panelHeight = 248;
+    const panelHeight = 278;
     context.fillStyle = '#081426dc';
     context.fillRect(padding, padding, panelWidth, panelHeight);
     context.strokeStyle = '#407590';
@@ -314,7 +339,7 @@ export class Renderer {
     context.textAlign = 'left';
     context.fillStyle = '#e5f9ff';
     context.font = 'bold 12px system-ui';
-    context.fillText(`ETAPA 1 · NÍVEL ${state.level}/20`, padding + 11, padding + 20);
+    context.fillText(`ETAPA 1 · NÍVEL ${state.level}/32`, padding + 11, padding + 20);
     context.textAlign = 'right';
     context.fillStyle = '#81bdd8';
     context.font = 'bold 11px system-ui';
@@ -328,13 +353,13 @@ export class Renderer {
     context.fillRect(padding + 11, padding + 45, panelWidth - 22, 8);
     context.fillStyle = player.hp / player.maxHp < .3 ? '#ff5877' : '#4df8a8';
     context.fillRect(padding + 11, padding + 45, (panelWidth - 22) * clamp(player.hp / player.maxHp, 0, 1), 8);
-    context.fillStyle = state.level >= 20 ? '#ffe783' : '#a8c5d6';
+    context.fillStyle = state.level >= 32 ? '#ffe783' : '#a8c5d6';
     context.font = '10px system-ui';
-    context.fillText(state.level >= 20 ? 'ETAPA 1 · LIMITE DE NÍVEL ATINGIDO' : `EXPERIÊNCIA PARA O NÍVEL ${state.level + 1} · ${state.xp} / ${state.nextXp} XP`, padding + 11, padding + 69);
+    context.fillText(state.level >= 32 ? 'NÍVEL MÁXIMO · NÚCLEO DO RIFT' : `EXPERIÊNCIA PARA O NÍVEL ${state.level + 1} · ${state.xp} / ${state.nextXp} XP`, padding + 11, padding + 69);
     context.fillStyle = '#294258';
     context.fillRect(padding + 11, padding + 75, panelWidth - 22, 6);
-    context.fillStyle = state.level >= 20 ? '#ffe783' : '#6ee6ff';
-    context.fillRect(padding + 11, padding + 75, (panelWidth - 22) * (state.level >= 20 ? 1 : clamp(state.xp / state.nextXp, 0, 1)), 6);
+    context.fillStyle = state.level >= 32 ? '#ffe783' : '#6ee6ff';
+    context.fillRect(padding + 11, padding + 75, (panelWidth - 22) * (state.level >= 32 ? 1 : clamp(state.xp / state.nextXp, 0, 1)), 6);
     context.strokeStyle = '#40759080';
     context.beginPath(); context.moveTo(padding + 11, padding + 87); context.lineTo(padding + panelWidth - 11, padding + 87); context.stroke();
 
@@ -342,15 +367,16 @@ export class Renderer {
       { label: 'Dano por disparo', value: `${Math.round(player.damage)}` },
       { label: 'Cadência de tiro', value: `${(1 / player.rate).toFixed(1)} tiros/s` },
       { label: 'Velocidade da nave', value: `${Math.round(player.move)} px/s` },
+      { label: 'Disparos por rajada', value: `${player.shots}` },
+      { label: 'Perfuração', value: `${player.pierce} alvos` },
       { label: 'Chance de crítico', value: `${Math.round(player.crit * 100)}%` },
       { label: 'Proteção contra dano', value: player.armor >= 0 ? `${Math.round(player.armor * 100)}% menos` : `${Math.round(Math.abs(player.armor) * 100)}% extra` },
-      { label: 'Velocidade do projétil', value: `${Math.round(player.projectileSpeed)} px/s` },
     ];
     context.fillStyle = '#59daf2';
     context.font = 'bold 9px system-ui';
     context.fillText('ATRIBUTOS DE COMBATE', padding + 11, padding + 101);
     stats.forEach((stat, index) => {
-      const y = padding + 119 + index * 17;
+      const y = padding + 117 + index * 15;
       context.textAlign = 'left';
       context.fillStyle = '#a8c5d6';
       context.font = '10px system-ui';
@@ -362,17 +388,17 @@ export class Renderer {
     });
     context.textAlign = 'left';
     context.strokeStyle = '#40759080';
-    context.beginPath(); context.moveTo(padding + 11, padding + 225); context.lineTo(padding + panelWidth - 11, padding + 225); context.stroke();
+    context.beginPath(); context.moveTo(padding + 11, padding + 231); context.lineTo(padding + panelWidth - 11, padding + 231); context.stroke();
     const crew = state.companions.length
-      ? state.companions.map(companion => `${(companion.name ?? 'Companheiro').replace('Companheiro ', '')} L${companion.level}${companion.disabledTimer > 0 ? ` · OFF ${companion.disabledTimer.toFixed(1)}s` : ''}`).join('  ·  ')
+      ? state.companions.map(companion => `${companion.name} L${companion.level}${companion.collects ? ` · ${companion.collectionPhase === 'collect' ? 'COLETA' : 'ENTREGA'}` : companion.disabledTimer > 0 ? ` · OFF ${companion.disabledTimer.toFixed(1)}s` : ''}`).join('  ·  ')
       : 'Nenhum companheiro na equipe';
     context.fillStyle = '#8debdc';
     context.font = 'bold 9px system-ui';
-    context.fillText('ESQUADRÃO', padding + 11, padding + 241);
+    context.fillText('ESQUADRÃO', padding + 11, padding + 250);
     context.textAlign = 'right';
     context.fillStyle = state.companions.length ? '#d9fff5' : '#8299ac';
     context.font = '9px system-ui';
-    context.fillText(crew, padding + panelWidth - 11, padding + 241, panelWidth - 91);
+    context.fillText(crew, padding + panelWidth - 11, padding + 250, panelWidth - 91);
 
     context.textAlign = 'right';
     context.font = 'bold 18px system-ui';
@@ -381,25 +407,27 @@ export class Renderer {
     context.font = '11px system-ui';
     context.fillStyle = '#83aec8';
     context.fillText(`RECORDE ${bestScore}`, width - padding, padding + 40);
-    context.fillStyle = state.stageCompleted || state.bossesDefeated >= 3 ? '#ffe783' : '#83aec8';
+    context.fillStyle = state.stageCompleted || state.bossesDefeated >= 10 ? '#ffe783' : '#83aec8';
     context.font = 'bold 11px system-ui';
-    context.fillText(state.stageCompleted ? 'ETAPA 1 CONCLUÍDA · SOBREVIVA' : `GUARDIÕES ${state.bossesDefeated}/4`, width - padding, padding + 55);
+    context.fillText(state.stageCompleted ? 'ETAPA 1 CONCLUÍDA' : `GUARDIÕES ${state.bossesDefeated}/${TOTAL_BOSSES}`, width - padding, padding + 55);
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
     context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 75);
-    const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩' };
+    const powerIcons = { companion: '🛸', shield: '🛡', charged: '☄', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳', ionStorm: '🌩', activeShield: '🔰', teleport: '🌀', minefield: '💣', riftLance: '⚔️' };
     const squadLevel = Math.max(0, ...state.companions.map(companion => companion.level));
     const activePowers = [state.companions.length ? `🛸${state.companions.length} · L${squadLevel}` : '', ...Object.entries(state.powers).filter(([, value]) => value > 0).map(([key, value]) => `${powerIcons[key]}×${value}`)].filter(Boolean).join('  ');
     context.fillStyle = '#d5b4ff';
     context.font = '12px system-ui';
-    context.fillText(activePowers, width - padding, padding + 95);
+    context.fillText(activePowers || 'SEM SUPERPODERES ATIVOS', width - padding, padding + 95, Math.max(120, width * .4));
     context.fillStyle = '#ffe783';
     context.font = 'bold 11px system-ui';
-    context.fillText(`◈ ${state.creditsEarned} CR NESTA RUN`, width - padding, padding + 135);
+    context.fillText(`◈ ${state.creditsEarned} CR NESTA RUN`, width - padding, padding + 165);
     if (state.powers.charged) {
       context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb';
       context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, padding + 113);
     }
+    if (state.powers.teleport) { context.fillStyle = state.teleportCooldown <= 0 ? '#d5b4ff' : '#9eabbb'; context.fillText(`SALTO Q ${state.teleportCooldown <= 0 ? 'PRONTO' : `${state.teleportCooldown.toFixed(1)}s`}`, width - padding, padding + 133); }
+    if (state.powers.activeShield) { context.fillStyle = state.activeShieldCooldown <= 0 ? '#9fd7ff' : '#9eabbb'; context.fillText(`BARREIRA E ${state.activeShieldTime > 0 ? `${state.activeShieldTime.toFixed(1)}s` : state.activeShieldCooldown <= 0 ? 'PRONTA' : `${state.activeShieldCooldown.toFixed(1)}s`}`, width - padding, padding + (state.powers.charged ? 153 : 113)); }
     if (state.mode === 'paused') { context.fillStyle = '#020914b8'; context.fillRect(0, 0, width, this.height); context.textAlign = 'center'; context.fillStyle = '#fff'; context.font = 'bold 40px system-ui'; context.fillText('PAUSADO', width / 2, this.height / 2); context.font = '16px system-ui'; context.fillText('Pressione P para continuar', width / 2, this.height / 2 + 30); }
   }
 }

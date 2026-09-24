@@ -3,12 +3,14 @@ export class InputController {
   pointer = { x: 0, y: 0, active: false };
   joystick = { x: 0, y: 0 };
   onDash = () => {};
+  onTeleport = () => {};
+  onActiveShield = () => {};
   onChargedShot = () => {};
   onPointerMove = () => {};
   onPause = () => {};
   onChoice = () => {};
 
-  constructor(canvas, dashButton, joystick, nub) {
+  constructor(canvas, dashButton, joystick, nub, teleportButton, shieldButton) {
     this.canvas = canvas;
     this.joystickElement = joystick;
     this.nub = nub;
@@ -21,6 +23,8 @@ export class InputController {
       if (event.button === 0 || event.pointerType === 'touch') this.onChargedShot();
     });
     dashButton.addEventListener('click', () => this.onDash());
+    teleportButton?.addEventListener('click', () => this.onTeleport());
+    shieldButton?.addEventListener('click', () => this.onActiveShield());
     joystick.addEventListener('pointerdown', event => { joystick.setPointerCapture(event.pointerId); this.moveJoystick(event); });
     joystick.addEventListener('pointermove', event => { if (joystick.hasPointerCapture(event.pointerId)) this.moveJoystick(event); });
     joystick.addEventListener('pointerup', () => this.resetJoystick());
@@ -38,8 +42,10 @@ export class InputController {
     this.keys.add(key);
     if (event.repeat) return;
     if (key === ' ') this.onDash();
+    if (key === 'q') this.onTeleport();
+    if (key === 'e') this.onActiveShield();
     if (key === 'p') this.onPause();
-    if (/^[1-4]$/.test(key)) this.onChoice(Number(key) - 1);
+    if (/^[1-9]$/.test(key)) this.onChoice(Number(key) - 1);
   }
 
   moveJoystick(event) {
