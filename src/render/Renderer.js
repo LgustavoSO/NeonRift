@@ -89,6 +89,7 @@ export class Renderer {
     for (const bullet of bullets) this.drawBullet(context, bullet);
     for (const bullet of enemyBullets) this.drawEnemyBullet(context, bullet);
     for (const enemy of enemies) this.drawEnemy(context, enemy, now);
+    if (state.singularityField) this.drawSingularityField(context, state.singularityField, now);
     if (state.powers.aimbot && state.aimTarget && enemies.includes(state.aimTarget)) {
       context.save(); context.strokeStyle = '#ffd45c65'; context.lineWidth = 1; context.setLineDash([4, 8]); context.beginPath(); context.moveTo(player.x, player.y); context.lineTo(state.aimTarget.x, state.aimTarget.y); context.stroke(); context.setLineDash([]); context.restore();
       this.drawTargetLock(context, state.aimTarget, now);
@@ -146,15 +147,68 @@ export class Renderer {
       for (let step = 1; step < 7; step += 1) { const t = step / 7; const jag = Math.sin(step * 18 + now * .06) * 10 * context.globalAlpha; context.lineTo(ring.originX + dx * t + nx * jag, ring.originY + dy * t + ny * jag); }
       context.lineTo(ring.x, ring.y); context.stroke();
       context.fillStyle = '#f4ffff'; context.beginPath(); context.arc(ring.x, ring.y, 5 + progress * 4, 0, TAU); context.fill();
-    } else if (ring.kind === 'singularity') {
-      const r = ring.maxRadius * (1 - progress * .72); context.lineWidth = 4; context.setLineDash([9, 8]);
-      for (let orbit = 0; orbit < 3; orbit += 1) { context.beginPath(); context.ellipse(ring.x, ring.y, r * (1 - orbit * .17), r * (.72 - orbit * .11), now * .0012 * (orbit % 2 ? -1 : 1), now * .002 + orbit * 1.7, now * .002 + orbit * 1.7 + Math.PI * 1.65); context.stroke(); }
-      context.setLineDash([]); context.beginPath(); context.arc(ring.x, ring.y, 18 + progress * 15, 0, TAU); context.stroke();
     } else {
       const r = ring.maxRadius * progress; context.lineWidth = ring.kind === 'nova' ? 13 * (1 - progress) + 3 : 9 * (1 - progress) + 2;
       context.beginPath(); context.arc(ring.x, ring.y, r, 0, TAU); context.stroke();
       if (ring.kind === 'nova') { context.strokeStyle = '#f5e6ff'; context.lineWidth = 3; context.beginPath(); context.arc(ring.x, ring.y, r * .83, now * .003, now * .003 + Math.PI * 1.45); context.stroke(); }
     }
+    context.restore();
+  }
+
+  drawSingularityField(context, field, now) {
+    const charging = field.phase === 'charging';
+    const progress = charging
+      ? 1 - clamp(field.timer / 1.5, 0, 1)
+      : 1 - clamp(field.timer / field.duration, 0, 1);
+    const pulse = .5 + Math.sin(now * .012) * .5;
+    const radius = charging ? 24 + progress * 18 : 31 + pulse * 7;
+
+    context.save();
+    context.translate(field.x, field.y);
+    context.globalAlpha = .88;
+    context.strokeStyle = charging ? '#d4a4ff' : '#c08aff';
+    context.fillStyle = '#e5caff';
+    context.shadowColor = '#a76cff';
+    context.shadowBlur = charging ? 17 : 30;
+    context.lineWidth = 2;
+    context.setLineDash(charging ? [5, 5] : [3, 6]);
+    context.beginPath();
+    context.arc(0, 0, radius, now * .001, now * .001 + Math.PI * 1.8);
+    context.stroke();
+    context.setLineDash([]);
+
+    for (let orbit = 0; orbit < 2; orbit += 1) {
+      context.beginPath();
+      context.ellipse(0, 0, radius * (1 - orbit * .18), radius * .56, now * .0014 * (orbit ? -1 : 1), now * .002 + orbit * Math.PI, now * .002 + orbit * Math.PI + Math.PI * 1.55);
+      context.stroke();
+    }
+    if (!charging) {
+      for (let ray = 0; ray < 8; ray += 1) {
+        const angle = ray * TAU / 8 + now * .0018;
+        const reach = 52 + Math.sin(now * .008 + ray) * 12;
+        context.globalAlpha = .34 + pulse * .2;
+        context.beginPath();
+        context.moveTo(Math.cos(angle) * reach, Math.sin(angle) * reach);
+        context.lineTo(Math.cos(angle + .22) * 16, Math.sin(angle + .22) * 16);
+        context.stroke();
+      }
+    }
+
+    context.globalAlpha = 1;
+    context.fillStyle = '#110c20';
+    context.beginPath();
+    context.arc(0, 0, charging ? 8 + pulse * 2 : 12 + pulse * 3, 0, TAU);
+    context.fill();
+    context.strokeStyle = '#f0dcff';
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.arc(0, 0, charging ? 9 + pulse * 2 : 13 + pulse * 3, 0, TAU);
+    context.stroke();
+    context.fillStyle = '#f1ddff';
+    context.textAlign = 'center';
+    context.font = '900 10px system-ui';
+    context.shadowBlur = 8;
+    context.fillText(charging ? `COLAPSO EM ${field.timer.toFixed(1)}s` : 'ATRAÇÃO ATIVA', 0, -radius - 13);
     context.restore();
   }
 

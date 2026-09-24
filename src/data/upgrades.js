@@ -25,7 +25,7 @@ const SUPERPOWER_DEFINITIONS = [
   { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'Consome 5 pontos de vida máxima por nível de hangar.', key: 'nova', baseCost: 65 },
   { icon: '🎯', name: 'Mira automática', description: 'Guia parte dos disparos existentes da nave até o inimigo mais próximo.', tradeoff: 'Reduz a cadência em 4% por nível de hangar.', key: 'aimbot', baseCost: 55 },
   { icon: '⚡', name: 'Sobrecarga', description: 'Aumenta a cadência e o dano da nave.', tradeoff: 'Reduz a velocidade em 3% por nível de hangar.', key: 'overdrive', baseCost: 65 },
-  { icon: '🕳️', name: 'Singularidade', description: 'Atrai e desacelera os inimigos ao redor.', tradeoff: 'Reduz a vida máxima em 3 pontos por nível de hangar.', key: 'singularity', baseCost: 70 },
+  { icon: '🕳️', name: 'Singularidade', description: 'Marca um ponto na mira; após 1,5 s, atrai XP e projéteis hostis de toda a arena para esse núcleo.', tradeoff: 'Reduz a vida máxima em 3 pontos por nível de hangar.', key: 'singularity', baseCost: 70 },
   { icon: '🌩️', name: 'Tempestade iônica', description: 'Raios atingem alvos em sequência automaticamente.', tradeoff: 'Reduz a blindagem em 2% por nível de hangar.', key: 'ionStorm', baseCost: 75 },
   { icon: '🔰', name: 'Barreira manual', description: 'Pressione E para ativar uma proteção temporária de emergência.', key: 'activeShield', baseCost: 75 },
   { icon: '🌀', name: 'Salto de fase', description: 'Pressione Q para se teleportar na direção da mira e escapar de perigo.', key: 'teleport', baseCost: 85 },

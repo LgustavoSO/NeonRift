@@ -217,24 +217,17 @@ export class Game {
     }
     if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ kind: 'nova', x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
     if (state.powers.singularity) {
-      this.pullSingularityEntities(delta);
       state.singularityTimer -= delta;
-      if (state.singularityTimer <= 0) {
-        const radius = 230 + state.powers.singularity * 24;
-        for (const enemy of entities.enemies) {
-          if (distance(player, enemy) > radius) continue;
-          const angle = angleTo(enemy, player);
-          const pull = enemy.type === 'boss' || enemy.type === 'miniboss' ? 18 : 74;
-          enemy.x += Math.cos(angle) * pull;
-          enemy.y += Math.sin(angle) * pull;
-          enemy.slow = Math.max(enemy.slow, .55 + state.powers.singularity * .08);
-          enemy.hp -= player.damage * (.7 + state.powers.singularity * .2);
+      if (state.singularityField) {
+        const field = state.singularityField;
+        field.timer -= delta;
+        if (field.phase === 'charging' && field.timer <= 0) this.activateSingularity(field);
+        if (field.phase === 'pulling') {
+          this.pullSingularityEntities(delta, field);
+          if (field.timer <= 0) state.singularityField = null;
         }
-        this.burst(player.x, player.y, '#ba8cff', 44, 1.4);
-        entities.rings.push({ kind: 'singularity', x: player.x, y: player.y, maxRadius: Math.hypot(this.renderer.width, this.renderer.height), life: 1.05, duration: 1.05, color: '#b78bff' });
-        state.singularityTimer = Math.max(4.2, 8 - state.powers.singularity * .7);
-        this.audio.play(125, .38, 'triangle', .09);
       }
+      if (!state.singularityField && state.singularityTimer <= 0) this.createSingularity();
     }
     if (state.powers.ionStorm) {
       state.ionStormTimer -= delta;
@@ -276,38 +269,89 @@ export class Game {
     }
   }
 
-  pullSingularityEntities(delta) {
-    const { player, entities, powers } = this.state;
+  createSingularity() {
+    const state = this.state;
+    const { player } = state;
+    const margin = 52;
+    const fallbackDistance = Math.min(280, Math.min(this.renderer.width, this.renderer.height) * .35);
+    const target = this.input.pointer.active
+      ? this.input.pointer
+      : { x: player.x + Math.cos(player.angle) * fallbackDistance, y: player.y + Math.sin(player.angle) * fallbackDistance };
+    const x = clamp(target.x, margin, this.renderer.width - margin);
+    const y = clamp(target.y, margin, this.renderer.height - margin);
+
+    const pullSpeed = 520 + state.powers.singularity * 40;
+    const duration = Math.max(2.4, Math.hypot(this.renderer.width, this.renderer.height) / pullSpeed + .35);
+    state.singularityField = { x, y, phase: 'charging', timer: 1.5, duration };
+    state.singularityTimer = Math.max(4.2, 8 - state.powers.singularity * .7);
+    this.burst(x, y, '#b78bff', 18, .7);
+    this.label(x, y - 42, 'SINGULARIDADE · COLAPSO EM 1,5s', '#d3aeff');
+  }
+
+  activateSingularity(field) {
+    const state = this.state;
+    const { player, entities } = state;
+    const rank = state.powers.singularity;
+    const radius = 230 + rank * 24;
+
+    field.phase = 'pulling';
+    field.timer = field.duration;
+    for (const enemy of entities.enemies) {
+      if (distance(field, enemy) > radius + enemy.radius) continue;
+      const angle = angleTo(enemy, field);
+      const pull = enemy.type === 'boss' || enemy.type === 'miniboss' ? 18 : 74;
+      enemy.x += Math.cos(angle) * pull;
+      enemy.y += Math.sin(angle) * pull;
+      enemy.slow = Math.max(enemy.slow, .55 + rank * .08);
+      enemy.hp -= player.damage * (.7 + rank * .2);
+    }
+    this.burst(field.x, field.y, '#ba8cff', 44, 1.4);
+    entities.rings.push({ kind: 'singularityPulse', x: field.x, y: field.y, maxRadius: radius, life: .8, duration: .8, color: '#b78bff' });
+    this.label(field.x, field.y - 42, 'COLAPSO GRAVITACIONAL', '#d3aeff');
+    this.audio.play(125, .38, 'triangle', .09);
+  }
+
+  pullSingularityEntities(delta, field) {
+    const { entities, powers } = this.state;
     const rank = powers.singularity;
 
-    for (const gem of entities.gems) {
-      const dx = player.x - gem.x;
-      const dy = player.y - gem.y;
-      const distanceToPlayer = Math.hypot(dx, dy);
-      if (!distanceToPlayer) continue;
-      const step = Math.min(distanceToPlayer, (360 + rank * 32) * delta);
-      gem.x += dx / distanceToPlayer * step;
-      gem.y += dy / distanceToPlayer * step;
+    for (let index = entities.gems.length - 1; index >= 0; index -= 1) {
+      const gem = entities.gems[index];
+      const dx = field.x - gem.x;
+      const dy = field.y - gem.y;
+      const distanceToField = Math.hypot(dx, dy);
+      if (distanceToField <= 14) {
+        if (this.state.level < MAX_RUN_LEVEL) this.state.xp += gem.value;
+        else this.state.score += gem.value * 2;
+        entities.gems.splice(index, 1);
+        this.audio.play(650 + this.state.xp * 4, .045, 'sine', .008);
+        continue;
+      }
+      const step = Math.min(distanceToField, (520 + rank * 40) * delta);
+      gem.x += dx / distanceToField * step;
+      gem.y += dy / distanceToField * step;
     }
 
-    const captureRadius = player.radius + 12;
+    const captureRadius = 16;
     for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) {
       const bullet = entities.enemyBullets[index];
-      const dx = player.x - bullet.x;
-      const dy = player.y - bullet.y;
-      const distanceToPlayer = Math.hypot(dx, dy);
-      if (distanceToPlayer <= captureRadius) {
+      const dx = field.x - bullet.x;
+      const dy = field.y - bullet.y;
+      const distanceToField = Math.hypot(dx, dy);
+      if (distanceToField <= captureRadius) {
         entities.enemyBullets.splice(index, 1);
         this.burst(bullet.x, bullet.y, '#c5a1ff', 5, .35);
         continue;
       }
 
       const currentSpeed = Math.hypot(bullet.vx, bullet.vy);
-      const pullSpeed = clamp(Math.max(currentSpeed, 250 + rank * 28), 250, 560);
+      const mapPullSpeed = Math.hypot(this.renderer.width, this.renderer.height) / field.duration + 140;
+      const pullSpeed = clamp(Math.max(currentSpeed, 250 + rank * 28, mapPullSpeed), 250, Math.max(560, mapPullSpeed));
       const turn = Math.min(1, (2.4 + rank * .25) * delta);
-      bullet.vx += (dx / distanceToPlayer * pullSpeed - bullet.vx) * turn;
-      bullet.vy += (dy / distanceToPlayer * pullSpeed - bullet.vy) * turn;
+      bullet.vx += (dx / distanceToField * pullSpeed - bullet.vx) * turn;
+      bullet.vy += (dy / distanceToField * pullSpeed - bullet.vy) * turn;
       bullet.singularityPulled = true;
+      bullet.singularityTarget = { x: field.x, y: field.y };
     }
   }
 
@@ -802,7 +846,7 @@ export class Game {
       bullet.y += bullet.vy * delta;
       bullet.life -= delta;
       bullet.homingTravel = (bullet.homingTravel ?? 0) + distance({ x: oldX, y: oldY }, bullet);
-      if (bullet.singularityPulled && distance(bullet, state.player) <= state.player.radius + 12) {
+      if (bullet.singularityPulled && bullet.singularityTarget && distance(bullet, bullet.singularityTarget) <= 16) {
         this.burst(bullet.x, bullet.y, '#c5a1ff', 5, .35);
         enemyBullets.splice(index, 1);
         continue;
@@ -833,10 +877,11 @@ export class Game {
 
   collectGems(delta) {
     const state = this.state; const { player, entities } = state;
+    const singularityPulling = state.singularityField?.phase === 'pulling';
     for (let index = entities.gems.length - 1; index >= 0; index -= 1) {
       const gem = entities.gems[index];
       let currentDistance = distance(gem, player);
-      if (currentDistance > 0 && currentDistance < player.magnet) {
+      if (!singularityPulling && currentDistance > 0 && currentDistance < player.magnet) {
         const step = Math.min(currentDistance, ((player.magnet - currentDistance) * 5 + 100) * delta);
         gem.x += (player.x - gem.x) / currentDistance * step;
         gem.y += (player.y - gem.y) / currentDistance * step;

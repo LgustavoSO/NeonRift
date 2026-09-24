@@ -42,6 +42,7 @@ export function createGameState(width, height) {
     chargeTimer: 0,
     novaTimer: 0,
     singularityTimer: 0,
+    singularityField: null,
     ionStormTimer: 0,
     player: {
       x: width / 2, y: height / 2, radius: 13, hp: 100, maxHp: 100,
