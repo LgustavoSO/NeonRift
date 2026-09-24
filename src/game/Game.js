@@ -217,6 +217,7 @@ export class Game {
     }
     if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ kind: 'nova', x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
     if (state.powers.singularity) {
+      this.pullSingularityEntities(delta);
       state.singularityTimer -= delta;
       if (state.singularityTimer <= 0) {
         const radius = 230 + state.powers.singularity * 24;
@@ -230,7 +231,7 @@ export class Game {
           enemy.hp -= player.damage * (.7 + state.powers.singularity * .2);
         }
         this.burst(player.x, player.y, '#ba8cff', 44, 1.4);
-        entities.rings.push({ kind: 'singularity', x: player.x, y: player.y, maxRadius: radius, life: 1.05, duration: 1.05, color: '#b78bff' });
+        entities.rings.push({ kind: 'singularity', x: player.x, y: player.y, maxRadius: Math.hypot(this.renderer.width, this.renderer.height), life: 1.05, duration: 1.05, color: '#b78bff' });
         state.singularityTimer = Math.max(4.2, 8 - state.powers.singularity * .7);
         this.audio.play(125, .38, 'triangle', .09);
       }
@@ -272,6 +273,41 @@ export class Game {
         }
         state.riftLanceTimer = Math.max(1.5, 3.8 - state.powers.riftLance * .45);
       }
+    }
+  }
+
+  pullSingularityEntities(delta) {
+    const { player, entities, powers } = this.state;
+    const rank = powers.singularity;
+
+    for (const gem of entities.gems) {
+      const dx = player.x - gem.x;
+      const dy = player.y - gem.y;
+      const distanceToPlayer = Math.hypot(dx, dy);
+      if (!distanceToPlayer) continue;
+      const step = Math.min(distanceToPlayer, (360 + rank * 32) * delta);
+      gem.x += dx / distanceToPlayer * step;
+      gem.y += dy / distanceToPlayer * step;
+    }
+
+    const captureRadius = player.radius + 12;
+    for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) {
+      const bullet = entities.enemyBullets[index];
+      const dx = player.x - bullet.x;
+      const dy = player.y - bullet.y;
+      const distanceToPlayer = Math.hypot(dx, dy);
+      if (distanceToPlayer <= captureRadius) {
+        entities.enemyBullets.splice(index, 1);
+        this.burst(bullet.x, bullet.y, '#c5a1ff', 5, .35);
+        continue;
+      }
+
+      const currentSpeed = Math.hypot(bullet.vx, bullet.vy);
+      const pullSpeed = clamp(Math.max(currentSpeed, 250 + rank * 28), 250, 560);
+      const turn = Math.min(1, (2.4 + rank * .25) * delta);
+      bullet.vx += (dx / distanceToPlayer * pullSpeed - bullet.vx) * turn;
+      bullet.vy += (dy / distanceToPlayer * pullSpeed - bullet.vy) * turn;
+      bullet.singularityPulled = true;
     }
   }
 
@@ -525,13 +561,28 @@ export class Game {
         const entry = segmentCircleEntry(oldX, oldY, bullet.x, bullet.y, enemy, enemy.radius + bullet.radius);
         if (entry != null) contacts.push({ entry, enemy });
       }
+      for (const mine of state.entities.mines) {
+        if (mine.friendly) continue;
+        const entry = segmentCircleEntry(oldX, oldY, bullet.x, bullet.y, mine, (mine.radius ?? 16) + bullet.radius);
+        if (entry != null) contacts.push({ entry, mine });
+      }
       if (bullet.charged) for (const asteroid of state.entities.asteroids) {
         const entry = segmentCircleEntry(oldX, oldY, bullet.x, bullet.y, asteroid, asteroid.radius + bullet.radius);
         if (entry != null) contacts.push({ entry, asteroid });
       }
       contacts.sort((a, b) => a.entry - b.entry);
       let remove = false;
-      for (const { enemy, asteroid } of contacts) {
+      for (const { enemy, asteroid, mine } of contacts) {
+        if (mine) {
+          const mineIndex = state.entities.mines.indexOf(mine);
+          if (mineIndex < 0) continue;
+          state.entities.mines.splice(mineIndex, 1);
+          state.entities.rings.push({ kind: 'mine', x: mine.x, y: mine.y, maxRadius: 34, life: .45, duration: .45, color: '#ffb27a' });
+          this.burst(mine.x, mine.y, '#ffb27a', 18, 1);
+          this.label(mine.x, mine.y - 18, 'MINA DESTRUÍDA', '#ffd0a1');
+          remove = true;
+          break;
+        }
         if (asteroid) {
           state.entities.asteroids.splice(state.entities.asteroids.indexOf(asteroid), 1);
           this.explodeChargedShot(bullet, asteroid.x, asteroid.y);
@@ -733,7 +784,7 @@ export class Game {
     const { enemyBullets } = state.entities;
     for (let index = enemyBullets.length - 1; index >= 0; index -= 1) {
       const bullet = enemyBullets[index];
-      if (bullet.homingTime > 0) {
+      if (bullet.homingTime > 0 && !bullet.singularityPulled) {
         const speed = Math.hypot(bullet.vx, bullet.vy) || 1;
         if ((bullet.homingTravel ?? 0) >= bullet.homingRange || distance(bullet, state.player) > bullet.homingRange) bullet.homingTime = 0;
         else {
@@ -751,6 +802,11 @@ export class Game {
       bullet.y += bullet.vy * delta;
       bullet.life -= delta;
       bullet.homingTravel = (bullet.homingTravel ?? 0) + distance({ x: oldX, y: oldY }, bullet);
+      if (bullet.singularityPulled && distance(bullet, state.player) <= state.player.radius + 12) {
+        this.burst(bullet.x, bullet.y, '#c5a1ff', 5, .35);
+        enemyBullets.splice(index, 1);
+        continue;
+      }
       const interceptor = state.companions.find(companion => companion.level >= companion.interceptLevel && companion.disabledTimer <= 0 && distance(bullet, companion) < 9 + bullet.radius);
       if (interceptor) {
         interceptor.disabledTimer = 2;

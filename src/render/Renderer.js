@@ -253,7 +253,7 @@ export class Renderer {
 
   drawPlayer(context, state, now) {
     const { player } = state;
-    context.save(); context.translate(player.x, player.y); context.rotate(player.angle + Math.PI / 2); if (player.invulnerable > 0 && Math.floor(now / 65) % 2) context.globalAlpha = .4;
+    context.save(); context.translate(player.x, player.y); context.rotate(player.angle + Math.PI / 2); context.scale(1.18, 1.18); if (player.invulnerable > 0 && Math.floor(now / 65) % 2) context.globalAlpha = .4;
     const thrusterColor = player.dashTime > 0 ? '#ffffff' : state.powers.overdrive ? '#ffb84c' : player.dash <= 0 ? '#ffd34f' : '#42d9ff';
     context.shadowBlur = 25; context.shadowColor = '#50eaff'; context.fillStyle = '#10233c'; context.strokeStyle = '#9af7ff'; context.lineWidth = 2.4;
     context.beginPath(); context.moveTo(0, -22); context.lineTo(8, -7); context.lineTo(26, 9); context.lineTo(11, 7); context.lineTo(8, 17); context.lineTo(0, 12); context.lineTo(-8, 17); context.lineTo(-11, 7); context.lineTo(-26, 9); context.lineTo(-8, -7); context.closePath(); context.fill(); context.stroke();
