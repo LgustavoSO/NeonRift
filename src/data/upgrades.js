@@ -1,3 +1,5 @@
+import { MAX_PERMANENT_UPGRADE_LEVEL } from './hangar.js';
+
 export const UPGRADES = [
   { key: 'cadence', icon: '⚡', name: 'Motor de pulso', description: '+22% de cadência de disparo', maxLevel: 5, apply: player => { player.rate *= .82; } },
   { key: 'damage', icon: '💥', name: 'Núcleo pesado', description: '+30% de dano por tiro', maxLevel: 5, apply: player => { player.damage *= 1.3; } },
@@ -16,21 +18,33 @@ export const UPGRADES = [
   { key: 'companion', icon: '🤖', name: 'Reforço de esquadrão', description: 'Adiciona um aliado ou escolhe um companheiro específico para evoluir', maxLevel: 99, special: true },
 ];
 
-export const POWERS = [
-  { icon: '🤖', name: 'Companheiro de combate', description: 'Escolha um drone novo ou evolua um aliado específico nesta expedição.', tradeoff: 'Aliados atingidos ficam 2 segundos sem atirar.', key: 'companion', baseCost: 55, maxLevel: 3 },
-  { icon: '🛡️', name: 'Escudo reativo', description: 'Bloqueia dano automaticamente por alguns segundos; depois recarrega.', tradeoff: 'A recarga do canhão fica 5% mais lenta por nível de hangar.', key: 'shield', baseCost: 50, maxLevel: 3 },
-  { icon: '☄️', name: 'Tiro carregado', description: 'Projétil de energia atravessa a linha de frente e explode ao atingir chefes ou asteroides.', key: 'charged', baseCost: 60, maxLevel: 3 },
-  { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'Consome 5 pontos de vida máxima por nível de hangar.', key: 'nova', baseCost: 65, maxLevel: 3 },
-  { icon: '🎯', name: 'Mira automática', description: 'Alinha a nave ao alvo mais próximo e adiciona poucos tiros retos de apoio.', tradeoff: 'Reduz a cadência em 4% por nível de hangar.', key: 'aimbot', baseCost: 55, maxLevel: 3 },
-  { icon: '⚡', name: 'Sobrecarga', description: 'Aumenta a cadência e o dano da nave.', tradeoff: 'Reduz a velocidade em 3% por nível de hangar.', key: 'overdrive', baseCost: 65, maxLevel: 3 },
-  { icon: '🕳️', name: 'Singularidade', description: 'Atrai e desacelera os inimigos ao redor.', tradeoff: 'Reduz a vida máxima em 3 pontos por nível de hangar.', key: 'singularity', baseCost: 70, maxLevel: 3 },
-  { icon: '🌩️', name: 'Tempestade iônica', description: 'Raios atingem alvos em sequência automaticamente.', tradeoff: 'Reduz a blindagem em 2% por nível de hangar.', key: 'ionStorm', baseCost: 75, maxLevel: 3 },
-  { icon: '🔰', name: 'Barreira manual', description: 'Pressione E para ativar uma proteção temporária de emergência.', key: 'activeShield', baseCost: 75, maxLevel: 3 },
-  { icon: '🌀', name: 'Salto de fase', description: 'Pressione Q para se teleportar na direção da mira e escapar de perigo.', key: 'teleport', baseCost: 85, maxLevel: 3 },
-  { icon: '💣', name: 'Campo de minas', description: 'Cria minas aliadas que detonam em área quando inimigos se aproximam.', key: 'minefield', baseCost: 80, maxLevel: 3 },
-  { icon: '⚔️', name: 'Lança do Rift', description: 'Dispara periodicamente uma sequência de lanças energéticas em alvos próximos.', key: 'riftLance', baseCost: 95, maxLevel: 3 },
+const SUPERPOWER_DEFINITIONS = [
+  { icon: '🤖', name: 'Companheiro de combate', description: 'Escolha um drone novo ou evolua um aliado específico nesta expedição.', tradeoff: 'Aliados atingidos ficam 2 segundos sem atirar.', key: 'companion', baseCost: 55, runMaxLevel: null },
+  { icon: '🛡️', name: 'Escudo reativo', description: 'Bloqueia dano automaticamente por alguns segundos; depois recarrega.', tradeoff: 'A recarga do canhão fica 5% mais lenta por nível de hangar.', key: 'shield', baseCost: 50, runMaxLevel: 3 },
+  { icon: '☄️', name: 'Tiro carregado', description: 'Projétil de energia atravessa a linha de frente e explode ao atingir chefes ou asteroides.', key: 'charged', baseCost: 60, runMaxLevel: 3 },
+  { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'Consome 5 pontos de vida máxima por nível de hangar.', key: 'nova', baseCost: 65, runMaxLevel: 3 },
+  { icon: '🎯', name: 'Mira automática', description: 'Alinha a nave ao alvo mais próximo e adiciona poucos tiros retos de apoio.', tradeoff: 'Reduz a cadência em 4% por nível de hangar.', key: 'aimbot', baseCost: 55, runMaxLevel: 3 },
+  { icon: '⚡', name: 'Sobrecarga', description: 'Aumenta a cadência e o dano da nave.', tradeoff: 'Reduz a velocidade em 3% por nível de hangar.', key: 'overdrive', baseCost: 65, runMaxLevel: 3 },
+  { icon: '🕳️', name: 'Singularidade', description: 'Atrai e desacelera os inimigos ao redor.', tradeoff: 'Reduz a vida máxima em 3 pontos por nível de hangar.', key: 'singularity', baseCost: 70, runMaxLevel: 3 },
+  { icon: '🌩️', name: 'Tempestade iônica', description: 'Raios atingem alvos em sequência automaticamente.', tradeoff: 'Reduz a blindagem em 2% por nível de hangar.', key: 'ionStorm', baseCost: 75, runMaxLevel: 3 },
+  { icon: '🔰', name: 'Barreira manual', description: 'Pressione E para ativar uma proteção temporária de emergência.', key: 'activeShield', baseCost: 75, runMaxLevel: 3 },
+  { icon: '🌀', name: 'Salto de fase', description: 'Pressione Q para se teleportar na direção da mira e escapar de perigo.', key: 'teleport', baseCost: 85, runMaxLevel: 3 },
+  { icon: '💣', name: 'Campo de minas', description: 'Cria minas aliadas que detonam em área quando inimigos se aproximam.', key: 'minefield', baseCost: 80, runMaxLevel: 3 },
+  { icon: '⚔️', name: 'Lança do Rift', description: 'Dispara periodicamente uma sequência de lanças energéticas em alvos próximos.', key: 'riftLance', baseCost: 95, runMaxLevel: 3 },
 ];
 
-export function pickChoices(source, count = 3) {
-  return [...source].sort(() => Math.random() - .5).slice(0, count);
+// Gameplay receives run-only definitions; permanent purchases have their own catalog below.
+export const POWERS = SUPERPOWER_DEFINITIONS.map(({ key, icon, name, description, tradeoff, runMaxLevel }) => ({ key, icon, name, description, tradeoff, runMaxLevel }));
+export const PERMANENT_POWER_UPGRADES = SUPERPOWER_DEFINITIONS
+  .filter(power => power.key !== 'companion')
+  .map(({ key, icon, name, description, tradeoff, baseCost }) => ({ key, icon, name, description, tradeoff, baseCost, maxLevel: MAX_PERMANENT_UPGRADE_LEVEL }));
+
+export function pickChoices(source, count = 3, random = Math.random) {
+  const shuffled = [...source];
+  const limit = Math.max(0, Math.min(shuffled.length, Math.floor(count)));
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled.slice(0, limit);
 }

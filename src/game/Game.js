@@ -1,10 +1,12 @@
 import { UPGRADES, POWERS, pickChoices } from '../data/upgrades.js';
+import { powerLevelsAdded, powerRunMaxLevel } from '../data/choice-details.js';
 import { angleTo, clamp, distance, random, TAU } from '../core/math.js';
 import { createGameState, randomSpawnPosition, resizeState } from '../core/state.js';
 import { loadBestScore, saveBestScore } from '../core/storage.js';
 import { AudioManager } from '../core/audio.js';
 import { loadProfile, saveProfile, rewardLevel, buyShipUpgrade, buySuperpowerUpgrade } from '../core/profile.js';
-import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, TOTAL_BOSSES } from '../data/hangar.js';
+import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, MAX_RUN_POWER_LEVEL, TOTAL_BOSSES } from '../data/hangar.js';
+import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, unlockedEnemyTypes, unlockedMiniBossVariants } from '../data/enemy-progression.js';
 
 const ENEMY_TYPES = {
   grunt: { radius: 13, hp: 28, speed: 75, damage: 13, value: 2, color: '#fb6384' },
@@ -23,12 +25,6 @@ const BOSS_VARIANTS = [
   { id: 'devourer', name: 'DEVORADOR', color: '#78dbff' },
   { id: 'oracle', name: 'ORÁCULO', color: '#ffe783' },
   { id: 'shatter', name: 'ESTILHAÇADOR', color: '#ff8fc8' },
-];
-
-const MINI_BOSS_VARIANTS = [
-  { id: 'rammer', name: 'ARÍETE', color: '#ff9b62' },
-  { id: 'seeker', name: 'RASTREADOR', color: '#70baff' },
-  { id: 'bomber', name: 'DETONADOR', color: '#e779ff' },
 ];
 
 const RUN_RULES = { bossCount: TOTAL_BOSSES, waveLength: 21, waveDeadline: 31, waveBreak: 2.1, enemyCap: 96 };
@@ -224,7 +220,7 @@ export class Game {
     if (state.powers.ionStorm) {
       state.ionStormTimer -= delta;
       if (state.ionStormTimer <= 0 && entities.enemies.length) {
-        const count = Math.min(5, 2 + state.powers.ionStorm);
+        const count = Math.min(MAX_RUN_POWER_LEVEL, 2 + state.powers.ionStorm);
         const targets = [...entities.enemies].sort(() => Math.random() - .5).slice(0, count);
         for (const enemy of targets) {
           enemy.hp -= player.damage * (1.15 + state.powers.ionStorm * .28);
@@ -250,7 +246,7 @@ export class Game {
     if (state.powers.riftLance) {
       state.riftLanceTimer -= delta;
       if (state.riftLanceTimer <= 0 && entities.enemies.length) {
-        const targets = [...entities.enemies].sort((a, b) => distance(player, a) - distance(player, b)).slice(0, Math.min(4, 1 + state.powers.riftLance));
+        const targets = [...entities.enemies].sort((a, b) => distance(player, a) - distance(player, b)).slice(0, Math.min(MAX_RUN_POWER_LEVEL, 1 + state.powers.riftLance));
         for (const enemy of targets) {
           enemy.hp -= player.damage * (1.4 + state.powers.riftLance * .55);
           entities.rings.push({ kind: 'riftLance', x: enemy.x, y: enemy.y, originX: player.x, originY: player.y, maxRadius: enemy.radius + 20, life: .45, duration: .45, color: '#ffb8ff' });
@@ -357,11 +353,24 @@ export class Game {
     const maximum = Math.min(RUN_RULES.enemyCap, 14 + state.wave * 5 + state.level * 2 + this.powerCount() * 3);
     state.spawnTimer -= delta;
     if (state.waveBreak > 0 || state.spawnTimer > 0 || state.entities.enemies.length >= maximum) return;
-    const roll = Math.random();
-    const type = state.level >= 9 && roll < .11 ? 'minelayer' : state.wave >= 3 && roll < .2 ? 'sniper' : state.wave >= 2 && roll < .42 ? 'runner' : state.wave >= 4 && roll < .59 ? 'tank' : 'grunt';
-    this.spawn(type);
+    this.spawn(this.randomUnlockedEnemyType());
     const interval = Math.max(.15, .7 - state.wave * .025 - state.level * .008 - this.powerCount() * .035 - pressure * .035);
     state.spawnTimer = interval * random(.72, 1.25);
+  }
+
+  unlockedEnemyTypes() { return unlockedEnemyTypes(this.state.bossesDefeated); }
+
+  unlockedMiniBossVariants() { return unlockedMiniBossVariants(this.state.bossesDefeated); }
+
+  randomUnlockedEnemyType() {
+    const types = this.unlockedEnemyTypes();
+    return types[Math.floor(Math.random() * types.length)];
+  }
+
+  canUpgradeCompanion() {
+    const state = this.state;
+    return state.companions.some(companion => companion.level < MAX_COMPANION_LEVEL)
+      || (state.companions.length < MAX_RUN_COMPANIONS && COMPANION_MODELS.some(model => !state.companions.some(companion => companion.modelId === model.id)));
   }
 
   spawn(type, options = {}) {
@@ -381,7 +390,9 @@ export class Game {
     };
     if (type === 'boss') Object.assign(enemy, { bossVariant: options.variant, color: options.variant.color, radius: 40, hp: template.hp * scale * (1 + state.level * .09), maxHp: template.hp * scale * (1 + state.level * .09), speed: template.speed * (1 + pressure * .025) });
     if (type === 'miniboss') {
-      const variant = options.variant ?? MINI_BOSS_VARIANTS[(state.level + state.wave) % MINI_BOSS_VARIANTS.length];
+      const variants = this.unlockedMiniBossVariants();
+      const requestedVariant = variants.find(item => item.id === options.variant?.id);
+      const variant = requestedVariant ?? variants[Math.max(0, Math.floor(state.level / 3) - 1) % variants.length];
       Object.assign(enemy, { miniVariant: variant, color: variant.color, radius: 29, hp: template.hp * scale * 1.8, maxHp: template.hp * scale * 1.8, speed: template.speed * (1 + pressure * .025), shootTimer: 1.5 });
     }
     state.entities.enemies.push(enemy);
@@ -393,7 +404,7 @@ export class Game {
     const isFinalBoss = state.level >= MAX_RUN_LEVEL;
     const variant = isFinalBoss
       ? { id: 'rift-core', name: 'NÚCLEO DO RIFT', color: '#ffe783' }
-      : BOSS_VARIANTS[(state.bossSequence + Math.floor(state.level / 4)) % BOSS_VARIANTS.length];
+      : BOSS_VARIANTS[state.bossSequence % BOSS_VARIANTS.length];
     state.bossSequence += 1;
     const boss = this.spawn('boss', { variant });
     const player = state.player;
@@ -442,7 +453,7 @@ export class Game {
       fire(center + (index - (player.shots - 1) / 2) * .16);
     }
     const autoTarget = state.powers.aimbot ? state.aimTarget : null;
-    const autoShots = Math.min(3, state.powers.aimbot);
+    const autoShots = Math.min(MAX_RUN_POWER_LEVEL, state.powers.aimbot);
     if (autoTarget && entities.enemies.includes(autoTarget)) {
       const targetAngle = angleTo(player, autoTarget);
       for (let index = 0; index < autoShots; index += 1) fire(targetAngle + (index - (autoShots - 1) / 2) * .08, true);
@@ -656,6 +667,12 @@ export class Game {
       state.score += 2000;
       if (enemy.isFinalBoss) state.finalBossDefeated = true;
       this.label(enemy.x, enemy.y, `${enemy.isFinalBoss ? 'NÚCLEO DO RIFT DESTRUÍDO' : 'GUARDIÃO DESTRUÍDO'} +2000`, '#ffe687');
+      if (!enemy.isFinalBoss) {
+        const nextEnemy = ENEMY_PROGRESSION[state.bossesDefeated];
+        const nextMiniBoss = MINI_BOSS_VARIANTS[state.bossesDefeated];
+        if (nextEnemy) this.label(enemy.x, enemy.y - 24, `NOVO INIMIGO · ${nextEnemy.name}`, '#ff9bb0');
+        if (nextMiniBoss) this.label(enemy.x, enemy.y - 42, `MINI-CHEFE LIBERADO · ${nextMiniBoss.name}`, nextMiniBoss.color);
+      }
       this.audio.play(950, .4, 'sawtooth', .1);
     } else if (isMiniBoss) {
       state.score += 650;
@@ -728,9 +745,10 @@ export class Game {
     state.player.hp += hpRestored;
     state.nextXp = Math.ceil(state.nextXp * 1.16 + state.level * 1.1);
     const count = Math.min(48, 12 + state.level * 2, Math.max(0, RUN_RULES.enemyCap - state.entities.enemies.length));
-    for (let index = 0; index < count; index += 1) this.spawn(state.level >= 4 && index % 5 === 0 ? 'tank' : index % 3 === 0 ? 'runner' : 'grunt');
+    for (let index = 0; index < count; index += 1) this.spawn(this.randomUnlockedEnemyType());
     if (state.level >= 3 && state.level % 3 === 0 && state.level % 4 !== 0) {
-      const variant = MINI_BOSS_VARIANTS[Math.floor(state.level / 2) % MINI_BOSS_VARIANTS.length];
+      const variants = this.unlockedMiniBossVariants();
+      const variant = variants[Math.max(0, Math.floor(state.level / 3) - 1) % variants.length];
       this.spawn('miniboss', { variant });
       this.label(this.renderer.width / 2, this.renderer.height * .24, `⚠ MINI-CHEFE · ${variant.name}`, variant.color);
     }
@@ -739,13 +757,32 @@ export class Game {
     if (reward.credits) this.label(this.renderer.width / 2, this.renderer.height * .37, `+${reward.credits} CRÉDITOS`, '#ffe687');
     for (const skill of reward.unlocked) this.label(this.renderer.width / 2, this.renderer.height * .42, `HABILIDADE DESBLOQUEADA · ${skill.name}`, '#8df4ff');
     state.mode = 'choice';
-    const eligibleUpgrades = UPGRADES.filter(upgrade => (state.upgradeLevels[upgrade.key] ?? 0) < upgrade.maxLevel && (!upgrade.available || upgrade.available(state.player)));
-    const choices = pickChoices(eligibleUpgrades, Math.min(3, eligibleUpgrades.length));
-    const unlockedPowers = POWERS.filter(power => this.profile.unlockedSkills.includes(power.key));
-    const newlyUnlockedPower = reward.unlocked.map(skill => unlockedPowers.find(power => power.key === skill.key)).find(Boolean);
-    if (newlyUnlockedPower) choices[choices.length - 1] = newlyUnlockedPower;
-    else if (unlockedPowers.length && choices.length && Math.random() < .34) choices[Math.floor(Math.random() * choices.length)] = unlockedPowers[Math.floor(Math.random() * unlockedPowers.length)];
+    const eligibleUpgrades = UPGRADES.filter(upgrade => !upgrade.special && (state.upgradeLevels[upgrade.key] ?? 0) < upgrade.maxLevel && (!upgrade.available || upgrade.available(state.player)));
+    const eligiblePowers = this.availableRunPowers();
+    const candidates = [...eligibleUpgrades, ...eligiblePowers];
+    const choiceCount = Math.min(3, candidates.length);
+    const recent = state.recentChoiceKeys ?? [];
+    const freshCandidates = candidates.filter(choice => !recent.includes(choice.key));
+    const choices = pickChoices(freshCandidates.length >= choiceCount ? freshCandidates : candidates, choiceCount);
+    const newlyUnlockedPower = reward.unlocked
+      .map(skill => eligiblePowers.find(power => power.key === skill.key))
+      .find(Boolean);
+    if (newlyUnlockedPower && !choices.some(choice => choice.key === newlyUnlockedPower.key)) {
+      if (choices.length < choiceCount) choices.push(newlyUnlockedPower);
+      else if (choices.length) choices[Math.floor(Math.random() * choices.length)] = newlyUnlockedPower;
+    }
+    if (!choices.length) {
+      this.finishChoice();
+      return;
+    }
+    state.recentChoiceKeys = [...recent, ...choices.map(choice => choice.key)].slice(-6);
     this.ui.showUpgrade(state, choices, choice => this.applyChoice(choice));
+  }
+
+  availableRunPowers() {
+    const state = this.state;
+    return POWERS.filter(power => this.profile.unlockedSkills.includes(power.key)
+      && (power.key === 'companion' ? this.canUpgradeCompanion() : (powerRunMaxLevel(power, state) == null || (state.powers[power.key] ?? 0) < powerRunMaxLevel(power, state))));
   }
 
   applyChoice(choice) {
@@ -778,17 +815,27 @@ export class Game {
   grantPower(power) {
     const state = this.state;
     const player = state.player;
-    const powerBonus = state.powerBonuses?.[power.key] ?? 0;
-    const levelsAdded = 1 + powerBonus;
+    const definition = POWERS.find(item => item.key === power.key);
+    let levelsAdded = definition ? powerLevelsAdded(definition, state) : 1;
+    let target = null;
+    let model = null;
+    if (power.key === 'companion') {
+      target = state.companions.find(companion => companion.id === power.targetId && companion.level < MAX_COMPANION_LEVEL);
+      model = !target && state.companions.length < MAX_RUN_COMPANIONS
+        ? COMPANION_MODELS.find(item => item.id === power.modelId && !state.companions.some(companion => companion.modelId === item.id))
+          ?? COMPANION_MODELS.find(item => !state.companions.some(companion => companion.modelId === item.id))
+        : null;
+      const remainingLevels = target ? MAX_COMPANION_LEVEL - target.level : model ? MAX_COMPANION_LEVEL : 0;
+      levelsAdded = Math.min(levelsAdded, remainingLevels);
+    }
+    if (!levelsAdded) return;
     state.powers[power.key] = (state.powers[power.key] ?? 0) + levelsAdded;
     if (power.key === 'companion') {
-      const target = state.companions.find(companion => companion.id === power.targetId);
       if (target) {
-        target.level += 1;
-        target.damageMultiplier *= 1.05;
-      } else if (state.companions.length < MAX_RUN_COMPANIONS) {
-        const model = COMPANION_MODELS.find(item => item.id === power.modelId) ?? COMPANION_MODELS.find(item => !state.companions.some(companion => companion.modelId === item.id)) ?? COMPANION_MODELS[0];
-        this.addCompanion(model);
+        target.level += levelsAdded;
+        target.damageMultiplier *= 1.05 ** levelsAdded;
+      } else if (model) {
+        this.addCompanion(model, levelsAdded);
       }
       this.label(player.x, player.y - 38, target ? `${target.name} · NÍVEL ${target.level}` : 'REFORÇO DE COMPANHEIRO', '#8dfff0');
     }
@@ -810,7 +857,7 @@ export class Game {
     }
     if (power.key === 'overdrive') {
       player.rate = Math.max(.13, player.rate * .86 ** levelsAdded);
-      player.damage *= 1.12;
+      player.damage *= 1.12 ** levelsAdded;
       player.move = Math.max(120, player.move * .97 ** levelsAdded);
       this.burst(player.x, player.y, '#ffc05b', 30, 1.1);
       this.label(player.x, player.y - 38, 'SOBRECARGA · POTÊNCIA MÁXIMA', '#ffd18a');
@@ -836,20 +883,29 @@ export class Game {
 
   openBossReward() {
     const state = this.state;
+    const availablePowers = this.availableRunPowers();
+    if (!availablePowers.length) {
+      this.finishBossReward();
+      return;
+    }
     state.mode = 'choice';
     this.ui.showBossReward(state, choice => {
-      const grant = selected => {
-        this.grantPower(selected);
-        state.pendingBossRewards -= 1;
-        if (selected.key === 'nova') state.novaTimer = 2;
-        if (state.pendingBossRewards > 0) this.openBossReward();
-        else if (state.finalBossDefeated) { state.stageCompleted = true; this.finishRun('victory'); }
-        else if (state.xp >= state.nextXp) this.levelUp();
-        else { state.mode = 'playing'; this.ui.showPlaying(); }
-      };
-      if (choice.key === 'companion') this.ui.showCompanionUpgrade(state, target => grant({ ...choice, ...target }));
-      else grant(choice);
-    });
+      if (choice.key === 'companion') this.ui.showCompanionUpgrade(state, target => this.finishBossReward({ ...choice, ...target }));
+      else this.finishBossReward(choice);
+    }, availablePowers);
+  }
+
+  finishBossReward(choice = null) {
+    const state = this.state;
+    if (choice) {
+      this.grantPower(choice);
+      if (choice.key === 'nova') state.novaTimer = 2;
+    }
+    state.pendingBossRewards = Math.max(0, state.pendingBossRewards - 1);
+    if (state.pendingBossRewards > 0) this.openBossReward();
+    else if (state.finalBossDefeated) { state.stageCompleted = true; this.finishRun('victory'); }
+    else if (state.xp >= state.nextXp) this.levelUp();
+    else { state.mode = 'playing'; this.ui.showPlaying(); }
   }
 
   chargedShot() {

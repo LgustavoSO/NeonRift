@@ -1,5 +1,6 @@
-import { pickChoices, POWERS } from '../data/upgrades.js';
-import { COMPANION_MODELS, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS, TOTAL_BOSSES } from '../data/hangar.js';
+import { pickChoices, PERMANENT_POWER_UPGRADES, POWERS } from '../data/upgrades.js';
+import { getChoiceNextEffect, getChoiceProgress } from '../data/choice-details.js';
+import { COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS, TOTAL_BOSSES } from '../data/hangar.js';
 import { upgradeCost } from '../core/profile.js';
 
 export class UIController {
@@ -56,7 +57,7 @@ export class UIController {
     }
     const powerRoot = document.querySelector('#superpower-upgrades');
     powerRoot.replaceChildren();
-    for (const item of POWERS.filter(power => power.key !== 'companion')) {
+    for (const item of PERMANENT_POWER_UPGRADES) {
       const unlocked = profile.unlockedSkills.includes(item.key);
       const level = profile.superpowerUpgrades[item.key] ?? 0;
       const cost = upgradeCost(item, level);
@@ -83,43 +84,52 @@ export class UIController {
 
   showUpgrade(state, upgrades, onChoice) {
     this.choiceHandler = onChoice;
-    this.choiceEyebrow.textContent = `NÍVEL ${state.level} · EVOLUÇÃO`;
+    this.choiceEyebrow.textContent = `NÍVEL ${state.level} · ESCOLHAS DA EXPEDIÇÃO`;
     this.choiceTitle.textContent = 'Escolha uma melhoria';
-    this.renderChoices(upgrades, choice => onChoice(choice));
+    this.renderChoices(upgrades, state, choice => onChoice(choice));
     this.choiceScreen.classList.remove('is-hidden');
   }
 
-  showBossReward(state, onChoice) {
+  showBossReward(state, onChoice, availablePowers = []) {
     this.choiceHandler = onChoice;
-    this.choiceEyebrow.textContent = `GUARDIÕES ${state.bossesDefeated}/${TOTAL_BOSSES} · PODER ESPECIAL`;
+    this.choiceEyebrow.textContent = `CHEFES ${state.bossesDefeated}/${TOTAL_BOSSES} · RECOMPENSA DA EXPEDIÇÃO`;
     this.choiceTitle.textContent = 'Escolha um superpoder';
-    const available = POWERS.filter(power => this.profile?.unlockedSkills?.includes(power.key));
-    this.renderChoices(pickChoices(available.length ? available : POWERS, 3), choice => onChoice(choice));
+    this.renderChoices(pickChoices(availablePowers, 3), state, choice => onChoice(choice));
     this.choiceScreen.classList.remove('is-hidden');
   }
 
   showCompanionUpgrade(state, onChoice) {
     this.choiceEyebrow.textContent = `ESQUADRÃO · ${state.companions.length} COMPANHEIROS`;
     this.choiceTitle.textContent = 'Quem recebe a melhoria?';
-    const choices = state.companions.map((companion, index) => ({ icon: companion.icon ?? '🛸', name: `${companion.name ?? `Companheiro ${index + 1}`} · NÍVEL ${companion.level}`, description: `Somente este aliado sobe de nível e recebe mais dano.`, targetId: companion.id }));
+    const companionPower = 1 + (state.powerBonuses?.companion ?? 0);
+    const choices = state.companions
+      .filter(companion => companion.level < MAX_COMPANION_LEVEL)
+      .map((companion, index) => ({ icon: companion.icon ?? '🛸', name: `${companion.name ?? `Companheiro ${index + 1}`} · NÍVEL ${companion.level}/${MAX_COMPANION_LEVEL}`, description: 'A melhoria afeta apenas este aliado; os demais mantêm seus níveis.', targetId: companion.id, companionGainLevels: Math.min(companionPower, MAX_COMPANION_LEVEL - companion.level) }));
     if (state.companions.length < MAX_RUN_COMPANIONS) {
-      for (const model of COMPANION_MODELS.filter(item => !state.companions.some(companion => companion.modelId === item.id))) choices.push({ icon: model.icon, name: `Adicionar ${model.name} · ${model.role}`, description: model.description, modelId: model.id, color: model.color });
+      const companionGainLevels = Math.min(companionPower, MAX_COMPANION_LEVEL);
+      for (const model of COMPANION_MODELS.filter(item => !state.companions.some(companion => companion.modelId === item.id))) choices.push({ icon: model.icon, name: `Adicionar ${model.name} · ${model.role}`, description: model.description, modelId: model.id, color: model.color, companionGainLevels });
     }
-    this.renderChoices(choices, onChoice); this.choiceScreen.classList.remove('is-hidden');
+    this.renderChoices(choices, state, onChoice); this.choiceScreen.classList.remove('is-hidden');
   }
 
-  renderChoices(choices, onChoice) {
+  renderChoices(choices, state, onChoice) {
     const shortcuts = choices.slice(0, 9).map((_, index) => `<kbd>${index + 1}</kbd>`).join('');
     this.choiceHint.innerHTML = `<span>${choices.length > 3 ? 'Escolha uma opção · atalhos' : 'Atalhos do teclado'}</span><span class="choice-shortcuts">${shortcuts}</span>`;
     this.choiceGrid.replaceChildren();
     choices.forEach((choice, index) => {
-      const isCompanion = Boolean(choice.targetId || choice.modelId);
+      const isCompanion = choice.targetId != null || Boolean(choice.modelId);
       const isSuperpower = !isCompanion && !choice.apply && POWERS.some(power => power.key === choice.key);
       const type = isCompanion ? 'COMPANHEIRO' : isSuperpower ? 'SUPERPODER' : 'HABILIDADE';
       const typeClass = isCompanion ? 'companion' : isSuperpower ? 'superpower' : 'skill';
+      const progress = getChoiceProgress(choice, state);
+      const nextEffect = getChoiceNextEffect(choice, state);
+      const progressMarkup = progress.current == null
+        ? `<span class="choice__progress choice__progress--new"><span>${progress.label}</span><b>NÍVEL ${progress.next}${progress.max == null ? '' : ` / ${progress.max}`}</b></span>`
+        : `<span class="choice__progress"><span><small>ATUAL</small><b>NÍVEL ${progress.current}</b></span><i aria-hidden="true">→</i><span><small>APÓS ESCOLHA</small><b>NÍVEL ${progress.next}${progress.max == null ? '' : ` / ${progress.max}`}</b></span></span>`;
       const button = document.createElement('button'); button.type = 'button'; button.className = `choice choice--${typeClass}`;
-      button.setAttribute('aria-label', `${type}: ${choice.name}. ${choice.description}`);
-      button.innerHTML = `<span class="choice__type">${type}</span><span class="choice__icon">${choice.icon}</span><span class="choice__name">${index + 1}. ${choice.name}</span><span class="choice__description">${choice.description}</span>${choice.tradeoff ? `<span class="choice__tradeoff">${choice.tradeoff}</span>` : ''}`;
+      const accessibleProgress = progress.current == null ? `${progress.label}, nível ${progress.next}` : `nível atual ${progress.current}, após a escolha nível ${progress.next}${progress.max == null ? '' : ` de ${progress.max}`}`;
+      button.setAttribute('aria-label', `${type}: ${choice.name}. ${accessibleProgress}. Próximo nível: ${nextEffect}.`);
+      button.innerHTML = `<span class="choice__type">${type}</span><span class="choice__icon">${choice.icon}</span><span class="choice__name">${index + 1}. ${choice.name}</span>${progressMarkup}<span class="choice__next"><small>O QUE O PRÓXIMO NÍVEL ADICIONA</small><span>${nextEffect}</span></span><span class="choice__description">${choice.description}</span>${choice.tradeoff ? `<span class="choice__tradeoff">${choice.tradeoff}</span>` : ''}`;
       button.addEventListener('click', () => onChoice(choice)); this.choiceGrid.append(button);
     });
   }
@@ -131,7 +141,7 @@ export class UIController {
     const powerNames = { companion: 'Reforço de esquadrão', shield: 'Escudo reativo', charged: 'Tiro carregado', nova: 'Pulso gravitacional', aimbot: 'Mira automática', overdrive: 'Sobrecarga', singularity: 'Singularidade', ionStorm: 'Tempestade iônica', activeShield: 'Barreira manual', teleport: 'Salto de fase', minefield: 'Campo de minas', riftLance: 'Lança do Rift' };
     const powerIcons = { companion: '🛸', shield: '🛡️', charged: '☄️', nova: '🌌', aimbot: '🎯', overdrive: '⚡', singularity: '🕳️', ionStorm: '🌩️', activeShield: '🔰', teleport: '🌀', minefield: '💣', riftLance: '⚔️' };
     const buildItems = Object.entries(state.powers).filter(([, level]) => level > 0).map(([key, level]) => `<span class="build-chip"><span>${powerIcons[key] ?? '✦'}</span>${powerNames[key] ?? key} <b>×${level}</b></span>`);
-    for (const companion of state.companions) buildItems.push(`<span class="build-chip build-chip--companion"><span>${companion.icon ?? '🛸'}</span>${companion.name} <b>N${companion.level}</b></span>`);
+    for (const companion of state.companions) buildItems.push(`<span class="build-chip build-chip--companion"><span>${companion.icon ?? '🛸'}</span>${companion.name} <b>N${companion.level}/${MAX_COMPANION_LEVEL}</b></span>`);
     if (!buildItems.length) buildItems.push('<span class="build-chip">Canhão de série</span>');
     const levelPercent = Math.min(100, state.level / MAX_RUN_LEVEL * 100);
     const bossPercent = Math.min(100, state.bossesDefeated / TOTAL_BOSSES * 100);
@@ -150,8 +160,8 @@ export class UIController {
       <section class="end-section end-progress">
         <div class="end-section__heading"><h3>Progresso da etapa</h3><strong>Nível ${state.level} <span>/ ${MAX_RUN_LEVEL}</span></strong></div>
         <div class="end-progress__track" role="progressbar" aria-label="Nível da campanha" aria-valuemin="1" aria-valuemax="${MAX_RUN_LEVEL}" aria-valuenow="${state.level}"><span style="width:${levelPercent}%"></span></div>
-        <div class="end-progress__bosses"><span>Guardiões derrotados</span><strong>${state.bossesDefeated} <small>/ ${TOTAL_BOSSES}</small></strong><span class="end-credit">◈ ${state.creditsEarned} créditos ganhos</span></div>
-        <div class="end-progress__track end-progress__track--boss" role="progressbar" aria-label="Guardiões derrotados" aria-valuemin="0" aria-valuemax="${TOTAL_BOSSES}" aria-valuenow="${state.bossesDefeated}"><span style="width:${bossPercent}%"></span></div>
+        <div class="end-progress__bosses"><span>Chefes derrotados</span><strong>${state.bossesDefeated} <small>/ ${TOTAL_BOSSES}</small></strong><span class="end-credit">◈ ${state.creditsEarned} créditos ganhos</span></div>
+        <div class="end-progress__track end-progress__track--boss" role="progressbar" aria-label="Chefes derrotados" aria-valuemin="0" aria-valuemax="${TOTAL_BOSSES}" aria-valuenow="${state.bossesDefeated}"><span style="width:${bossPercent}%"></span></div>
       </section>
       <section class="end-section end-build"><div class="end-section__heading"><h3>Configuração da nave</h3><span>${state.companions.length} companheiros</span></div><div class="build-chips">${buildItems.join('')}</div></section>`;
     document.querySelector('#again-button').innerHTML = 'TENTAR NOVAMENTE <span>→</span>';

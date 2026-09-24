@@ -1,5 +1,5 @@
 import { TAU, clamp, hexagon } from '../core/math.js';
-import { TOTAL_BOSSES } from '../data/hangar.js';
+import { MAX_COMPANION_LEVEL, TOTAL_BOSSES } from '../data/hangar.js';
 
 export class Renderer {
   constructor(canvas) {
@@ -324,7 +324,7 @@ export class Renderer {
     context.textAlign = 'center';
     context.font = 'bold 9px system-ui';
     context.fillStyle = disabled ? '#ffc17c' : '#d6caff';
-    context.fillText(disabled ? `${companion.disabledTimer.toFixed(1)}s` : `L${companion.level}`, companion.x, companion.y - 15);
+    context.fillText(disabled ? `${companion.disabledTimer.toFixed(1)}s` : `L${companion.level}/${MAX_COMPANION_LEVEL}`, companion.x, companion.y - 15);
   }
 
   drawHud(context, state, bestScore, width) {
@@ -390,7 +390,7 @@ export class Renderer {
     context.strokeStyle = '#40759080';
     context.beginPath(); context.moveTo(padding + 11, padding + 231); context.lineTo(padding + panelWidth - 11, padding + 231); context.stroke();
     const crew = state.companions.length
-      ? state.companions.map(companion => `${companion.name} L${companion.level}${companion.collects ? ` · ${companion.collectionPhase === 'collect' ? 'COLETA' : 'ENTREGA'}` : companion.disabledTimer > 0 ? ` · OFF ${companion.disabledTimer.toFixed(1)}s` : ''}`).join('  ·  ')
+      ? state.companions.map(companion => `${companion.name} L${companion.level}/${MAX_COMPANION_LEVEL}${companion.collects ? ` · ${companion.collectionPhase === 'collect' ? 'COLETA' : 'ENTREGA'}` : companion.disabledTimer > 0 ? ` · OFF ${companion.disabledTimer.toFixed(1)}s` : ''}`).join('  ·  ')
       : 'Nenhum companheiro na equipe';
     context.fillStyle = '#8debdc';
     context.font = 'bold 9px system-ui';
@@ -407,9 +407,9 @@ export class Renderer {
     context.font = '11px system-ui';
     context.fillStyle = '#83aec8';
     context.fillText(`RECORDE ${bestScore}`, width - padding, padding + 40);
-    context.fillStyle = state.stageCompleted || state.bossesDefeated >= 10 ? '#ffe783' : '#83aec8';
+    context.fillStyle = state.stageCompleted || state.bossesDefeated >= TOTAL_BOSSES ? '#ffe783' : '#83aec8';
     context.font = 'bold 11px system-ui';
-    context.fillText(state.stageCompleted ? 'ETAPA 1 CONCLUÍDA' : `GUARDIÕES ${state.bossesDefeated}/${TOTAL_BOSSES}`, width - padding, padding + 55);
+    context.fillText(state.stageCompleted ? 'ETAPA 1 CONCLUÍDA' : `CHEFES ${state.bossesDefeated}/${TOTAL_BOSSES}`, width - padding, padding + 55);
     context.fillStyle = player.dash <= 0 ? '#ffd34f' : '#83aec8';
     context.font = 'bold 12px system-ui';
     context.fillText(`IMPULSO ${player.dash <= 0 ? 'PRONTO' : `${player.dash.toFixed(1)}s`}`, width - padding, padding + 75);

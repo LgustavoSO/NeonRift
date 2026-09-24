@@ -1,14 +1,17 @@
 export const MAX_RUN_LEVEL = 32;
 export const MAX_RUN_COMPANIONS = 4;
-export const BOSS_SCHEDULE = Object.freeze({ 4: 1, 8: 1, 12: 1, 16: 1, 20: 2, 24: 2, 28: 2, 32: 1 });
+export const MAX_PERMANENT_UPGRADE_LEVEL = 10;
+export const MAX_RUN_POWER_LEVEL = 10;
+export const MAX_COMPANION_LEVEL = 5;
+export const BOSS_SCHEDULE = Object.freeze({ 4: 1, 8: 1, 12: 1, 16: 1, 20: 1, 24: 1, 28: 1, 32: 1 });
 export const TOTAL_BOSSES = Object.values(BOSS_SCHEDULE).reduce((total, count) => total + count, 0);
 
 export const SHIP_UPGRADES = [
-  { key: 'hull', name: 'Casco de titânio', icon: '🛡️', baseCost: 30, maxLevel: 5, description: 'Aumenta a vida máxima em 15 por melhoria.' },
-  { key: 'cannon', name: 'Núcleo de canhão', icon: '💥', baseCost: 35, maxLevel: 5, description: 'Aumenta o dano inicial em 8% por melhoria.' },
-  { key: 'engine', name: 'Vetores de impulso', icon: '🚀', baseCost: 32, maxLevel: 5, description: 'Aumenta a velocidade inicial em 5% por melhoria.' },
-  { key: 'dashDuration', name: 'Capacitor de impulso', icon: '⏱️', baseCost: 38, maxLevel: 5, description: 'Aumenta a duração do impulso em 0,08 s por melhoria (base: 0,38 s).' },
-  { key: 'cadence', name: 'Sincronizador', icon: '⚡', baseCost: 40, maxLevel: 5, description: 'Aumenta a cadência inicial em 5% por melhoria.' },
+  { key: 'hull', name: 'Casco de titânio', icon: '🛡️', baseCost: 30, maxLevel: MAX_PERMANENT_UPGRADE_LEVEL, description: 'Aumenta a vida máxima em 15 por melhoria.' },
+  { key: 'cannon', name: 'Núcleo de canhão', icon: '💥', baseCost: 35, maxLevel: MAX_PERMANENT_UPGRADE_LEVEL, description: 'Aumenta o dano inicial em 8% por melhoria.' },
+  { key: 'engine', name: 'Vetores de impulso', icon: '🚀', baseCost: 32, maxLevel: MAX_PERMANENT_UPGRADE_LEVEL, description: 'Aumenta a velocidade inicial em 5% por melhoria.' },
+  { key: 'dashDuration', name: 'Capacitor de impulso', icon: '⏱️', baseCost: 38, maxLevel: MAX_PERMANENT_UPGRADE_LEVEL, description: 'Aumenta a duração do impulso em 0,08 s por melhoria (base: 0,38 s).' },
+  { key: 'cadence', name: 'Sincronizador', icon: '⚡', baseCost: 40, maxLevel: MAX_PERMANENT_UPGRADE_LEVEL, description: 'Aumenta a cadência inicial em 5% por melhoria.' },
 ];
 
 // Companion ownership is intentionally run-local. These are choices, not hangar purchases.

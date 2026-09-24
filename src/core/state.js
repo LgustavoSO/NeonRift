@@ -26,6 +26,7 @@ export function createGameState(width, height) {
     flash: 0,
     powers: { companion: 0, shield: 0, charged: 0, nova: 0, aimbot: 0, overdrive: 0, singularity: 0, ionStorm: 0, activeShield: 0, teleport: 0, minefield: 0, riftLance: 0 },
     upgradeLevels: {},
+    recentChoiceKeys: [],
     firewheelLevel: 0,
     firewheelTimer: 0,
     minefieldTimer: 0,

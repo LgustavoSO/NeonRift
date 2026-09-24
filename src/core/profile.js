@@ -1,5 +1,5 @@
 import { MAX_RUN_LEVEL, SHIP_UPGRADES, SKILL_UNLOCKS } from '../data/hangar.js';
-import { POWERS } from '../data/upgrades.js';
+import { PERMANENT_POWER_UPGRADES } from '../data/upgrades.js';
 
 const PROFILE_KEY = 'neon-rift-profile-v1';
 
@@ -11,7 +11,7 @@ export function createDefaultProfile() {
     bestLevel: 1,
     runs: 0,
     shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key }) => [key, 0])),
-    superpowerUpgrades: Object.fromEntries(POWERS.map(({ key }) => [key, 0])),
+    superpowerUpgrades: Object.fromEntries(PERMANENT_POWER_UPGRADES.map(({ key }) => [key, 0])),
     unlockedSkills: ['shield'],
   };
 }
@@ -28,7 +28,7 @@ export function normalizeProfile(profile = {}) {
     bestLevel: Math.max(careerLevel, Math.min(MAX_RUN_LEVEL, Number(profile.bestLevel) || 1)),
     runs: Math.max(0, Math.floor(Number(profile.runs) || 0)),
     shipUpgrades: Object.fromEntries(SHIP_UPGRADES.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.shipUpgrades?.[key]) || 0))])),
-    superpowerUpgrades: Object.fromEntries(POWERS.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.superpowerUpgrades?.[key]) || 0))])),
+    superpowerUpgrades: Object.fromEntries(PERMANENT_POWER_UPGRADES.map(({ key, maxLevel }) => [key, Math.max(0, Math.min(maxLevel, Number(profile.superpowerUpgrades?.[key]) || 0))])),
     unlockedSkills: [...unlockedSkills],
   };
 }
@@ -64,7 +64,7 @@ export function buyShipUpgrade(profile, key) {
 }
 
 export function buySuperpowerUpgrade(profile, key) {
-  return buyUpgrade(profile, key, POWERS, 'superpowerUpgrades', (next, powerKey) => next.unlockedSkills.includes(powerKey));
+  return buyUpgrade(profile, key, PERMANENT_POWER_UPGRADES, 'superpowerUpgrades', (next, powerKey) => next.unlockedSkills.includes(powerKey));
 }
 
 export function rewardLevel(profile, level) {
