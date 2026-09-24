@@ -1,4 +1,4 @@
-import { UPGRADES, POWERS, pickChoices } from '../data/upgrades.js';
+import { POWERS, isUpgradeAvailable, pickChoices, pickLevelChoices } from '../data/upgrades.js';
 import { powerLevelsAdded } from '../data/choice-details.js';
 import { angleTo, clamp, distance, distanceSquared, segmentCircleEntry, random, TAU } from '../core/math.js';
 import { createGameState, randomSpawnPosition, resizeState } from '../core/state.js';
@@ -6,9 +6,9 @@ import { loadBestScore, saveBestScore } from '../core/storage.js';
 import { AudioManager } from '../core/audio.js';
 import { loadProfile, saveProfile, rewardLevel, buyShipUpgrade, buySuperpowerUpgrade } from '../core/profile.js';
 import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_POWER_TARGETS, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, collectorReturnDelay } from '../data/hangar.js';
-import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, unlockedEnemyTypes, unlockedMiniBossVariants } from '../data/enemy-progression.js';
+import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, lateBossStats, unlockedEnemyTypes, unlockedMiniBossVariants } from '../data/enemy-progression.js';
 import { RUN_RULES } from '../data/game-rules.js';
-import { advanceShield, shieldStats } from '../data/power-stats.js';
+import { advanceShield, firewheelStats, shieldStats } from '../data/power-stats.js';
 
 const ENEMY_TYPES = {
   grunt: { radius: 13, hp: 28, speed: 75, damage: 13, value: 2, color: '#fb6384' },
@@ -126,6 +126,7 @@ export class Game {
     if (state.mode !== 'playing') return;
     this.collectGems(delta);
     this.updateParticles(delta);
+    this.updateNotifications(delta);
     state.shake = Math.max(0, state.shake - 28 * delta); state.flash = Math.max(0, state.flash - delta);
     if (state.waveClock >= RUN_RULES.waveLength && (entities.enemies.length < Math.max(3, state.wave * 2) || state.waveClock >= RUN_RULES.waveDeadline)) this.nextWave();
     if (state.pendingBossRewards > 0 && state.mode === 'playing') this.openBossReward();
@@ -138,10 +139,19 @@ export class Game {
       const pressure = this.threatLevel();
       const count = Math.min(5, 2 + (Math.random() < .55 ? 1 : 0) + (pressure > 1.3 ? 1 : 0) + (state.level >= 20 ? 1 : 0));
       for (let index = 0; index < count; index += 1) {
-        const fromLeft = Math.random() < .5;
+        const side = Math.floor(Math.random() * 4);
+        const horizontal = side < 2;
+        const forward = side === 0 || side === 2;
+        const margin = 65 + index * 28;
         const levelSpeed = Math.max(0, state.level - 1) * 4 + Math.max(0, state.level - 19) * 8;
         const speed = random(300 + state.wave * 10 + levelSpeed, 390 + state.wave * 14 + levelSpeed);
-        entities.asteroids.push({ x: fromLeft ? -65 - index * 28 : this.renderer.width + 65 + index * 28, y: random(55, Math.max(56, this.renderer.height - 55)), vx: fromLeft ? speed : -speed, vy: random(-76, 76), radius: random(24, 36), spin: random(0, TAU), hit: false });
+        entities.asteroids.push({
+          x: horizontal ? (forward ? -margin : this.renderer.width + margin) : random(55, Math.max(56, this.renderer.width - 55)),
+          y: horizontal ? random(55, Math.max(56, this.renderer.height - 55)) : (forward ? -margin : this.renderer.height + margin),
+          vx: horizontal ? (forward ? speed : -speed) : random(-76, 76),
+          vy: horizontal ? random(-76, 76) : (forward ? speed : -speed),
+          radius: random(24, 36), spin: random(0, TAU), hit: false,
+        });
       }
       const gap = Math.max(2.8, 8 - state.wave * .2 - state.level * .055 - this.powerCount() * .28);
       state.asteroidTimer = random(gap, gap + 2.4);
@@ -153,12 +163,15 @@ export class Game {
       asteroid.x += asteroid.vx * delta; asteroid.y += asteroid.vy * delta; asteroid.spin += delta * 2;
       if (!asteroid.hit && distance(asteroid, player) < asteroid.radius + player.radius && player.dashTime <= 0 && state.shieldTime <= 0) {
         asteroid.hit = true;
+        entities.asteroids.splice(index, 1);
+        this.explodeAsteroid(asteroid);
         this.hurt(Math.max(1, Math.ceil(player.hp * .33)));
         if (state.mode !== 'playing') return;
-        this.burst(player.x, player.y, '#ffb073', 25);
+        continue;
       }
       // Incoming asteroids may start well outside the arena; only cull on exit.
-      if ((asteroid.vx < 0 && asteroid.x < -100) || (asteroid.vx > 0 && asteroid.x > this.renderer.width + 100)) entities.asteroids.splice(index, 1);
+      if ((asteroid.vx < 0 && asteroid.x < -100) || (asteroid.vx > 0 && asteroid.x > this.renderer.width + 100)
+        || (asteroid.vy < 0 && asteroid.y < -100) || (asteroid.vy > 0 && asteroid.y > this.renderer.height + 100)) entities.asteroids.splice(index, 1);
     }
     this.updateMines(delta);
     if (state.mode !== 'playing') return;
@@ -209,10 +222,10 @@ export class Game {
     if (state.firewheelLevel) {
       state.firewheelTimer -= delta;
       if (state.firewheelTimer <= 0) {
-        const radius = 74 + state.firewheelLevel * 15;
-        for (const enemy of entities.enemies) if (distance(player, enemy) < radius + enemy.radius) enemy.hp -= player.damage * (.45 + state.firewheelLevel * .22);
-        entities.rings.push({ kind: 'firewheel', x: player.x, y: player.y, maxRadius: radius, life: .45, duration: .45, color: '#ff9f5e' });
-        state.firewheelTimer = Math.max(.65, 1.65 - state.firewheelLevel * .2);
+        const { radius, damage, interval } = firewheelStats(state.firewheelLevel);
+        for (const enemy of entities.enemies) if (distance(player, enemy) < radius + enemy.radius) enemy.hp -= player.damage * damage;
+        entities.rings.push({ kind: 'firewheel', x: player.x, y: player.y, maxRadius: radius, life: .65, duration: .65, color: '#ff9f5e' });
+        state.firewheelTimer = interval;
       }
     }
     if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ kind: 'nova', x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
@@ -289,7 +302,7 @@ export class Game {
 
   singularityCooldownForHangar() {
     const rank = clamp(this.state.powerBonuses?.singularity ?? 0, 0, 10);
-    return 20 - rank;
+    return 40 - rank * 2;
   }
 
   activateSingularity(field) {
@@ -300,13 +313,17 @@ export class Game {
 
     field.phase = 'pulling';
     field.timer = field.duration;
+    field.suctionRadius = radius * .5;
     state.singularityTimer = this.singularityCooldownForHangar();
     for (const enemy of entities.enemies) {
-      if (distance(field, enemy) > radius + enemy.radius) continue;
-      const angle = angleTo(enemy, field);
-      const pull = enemy.type === 'boss' || enemy.type === 'miniboss' ? 18 : 74;
-      enemy.x += Math.cos(angle) * pull;
-      enemy.y += Math.sin(angle) * pull;
+      const enemyDistance = distance(field, enemy);
+      if (enemyDistance > radius + enemy.radius) continue;
+      if (enemyDistance <= field.suctionRadius + enemy.radius) {
+        const angle = angleTo(enemy, field);
+        const pull = enemy.type === 'boss' || enemy.type === 'miniboss' ? 18 : 74;
+        enemy.x += Math.cos(angle) * pull;
+        enemy.y += Math.sin(angle) * pull;
+      }
       enemy.slow = Math.max(enemy.slow, .55 + rank * .08);
       enemy.hp -= player.damage * (.7 + rank * .2);
     }
@@ -325,6 +342,7 @@ export class Game {
       const dx = field.x - gem.x;
       const dy = field.y - gem.y;
       const distanceToField = Math.hypot(dx, dy);
+      if (distanceToField > field.suctionRadius) continue;
       if (distanceToField <= 14) {
         gem.x = field.x;
         gem.y = field.y;
@@ -343,6 +361,7 @@ export class Game {
       const dx = field.x - bullet.x;
       const dy = field.y - bullet.y;
       const distanceToField = Math.hypot(dx, dy);
+      if (distanceToField > field.suctionRadius) continue;
       if (distanceToField <= captureRadius) {
         entities.enemyBullets.splice(index, 1);
         this.burst(bullet.x, bullet.y, '#c5a1ff', 5, .35);
@@ -458,6 +477,7 @@ export class Game {
 
   spawnEnemies(delta) {
     const state = this.state;
+    this.updateMiniBossSpawns(delta);
     const pressure = this.threatLevel();
     const commonEnemyScale = RUN_RULES.enemySpawnScale * RUN_RULES.commonEnemySpawnScale;
     const waveMaximum = 14 + state.wave * 5 + state.level * 2 + this.powerCount() * 3;
@@ -467,6 +487,25 @@ export class Game {
     this.spawn(this.randomUnlockedEnemyType());
     const interval = Math.max(.15, .7 - state.wave * .025 - state.level * .008 - this.powerCount() * .035 - pressure * .035);
     state.spawnTimer = interval / commonEnemyScale * random(.72, 1.25);
+  }
+
+  updateMiniBossSpawns(delta) {
+    const state = this.state;
+    if (state.waveBreak > 0 || state.entities.enemies.some(enemy => enemy.type === 'boss' && enemy.hp > 0)) return;
+    state.minibossTimer = Math.max(0, state.minibossTimer - delta);
+    if (state.minibossTimer > 0 || state.entities.enemies.length >= RUN_RULES.enemyCap) return;
+    if (this.spawnMiniBoss()) state.minibossTimer = random(22, 28) - Math.min(6, state.bossesDefeated);
+  }
+
+  spawnMiniBoss(variant = null) {
+    const state = this.state;
+    if (state.entities.enemies.length >= RUN_RULES.enemyCap) return false;
+    if (state.entities.enemies.filter(enemy => enemy.type === 'miniboss' && enemy.hp > 0).length >= 2) return false;
+    const variants = this.unlockedMiniBossVariants();
+    variant ??= variants[Math.floor(Math.random() * variants.length)];
+    this.spawn('miniboss', { variant });
+    this.label(0, 0, `⚠ MINI-CHEFE · ${variant.name}`, variant.color);
+    return true;
   }
 
   unlockedEnemyTypes() { return unlockedEnemyTypes(this.state.bossesDefeated); }
@@ -526,6 +565,11 @@ export class Game {
       boss.radius = 49;
       boss.hp *= 1.65;
     }
+    const escalation = lateBossStats(state.level);
+    boss.hp *= escalation.health;
+    boss.damage *= escalation.damage;
+    boss.projectileDamageMultiplier = escalation.damage;
+    boss.attackIntervalMultiplier = escalation.attackInterval;
     boss.maxHp = boss.hp;
     boss.shootTimer = .8;
     this.label(this.renderer.width / 2, this.renderer.height * .25, `${isFinalBoss ? '☢ CHEFE FINAL' : '⚠ GUARDIÃO'} ${variant.name} · NÍVEL ${state.level}`, variant.color);
@@ -634,7 +678,7 @@ export class Game {
         }
         if (asteroid) {
           state.entities.asteroids.splice(state.entities.asteroids.indexOf(asteroid), 1);
-          this.explodeChargedShot(bullet, asteroid.x, asteroid.y);
+          this.explodeAsteroid(asteroid, bullet);
           remove = true; break;
         }
         if (enemy.hp <= 0) continue;
@@ -643,7 +687,7 @@ export class Game {
         enemy.hp -= enemy.adaptive?.shield ? damage * .78 : enemy.adaptive?.armor ? damage * .86 : damage;
         enemy.slow = Math.max(enemy.slow, bullet.slow * (enemy.adaptive?.resist ? .65 : 1.7));
         this.burst(bullet.x, bullet.y, enemy.color, bullet.critical ? 10 : 5, .6);
-        if (bullet.critical) this.label(enemy.x, enemy.y - 23, `✦ ${Math.round(damage)}`, '#fff18c');
+        if (bullet.critical) this.combatLabel(enemy.x, enemy.y - 23, `✦ ${Math.round(damage)}`, '#fff18c');
         if (bullet.charged && enemy.type === 'boss') {
           this.explodeChargedShot(bullet, enemy.x, enemy.y);
           remove = true;
@@ -655,8 +699,16 @@ export class Game {
     }
   }
 
-  explodeChargedShot(bullet, x, y) {
-    const radius = 105 + this.state.powers.charged * 12;
+  explodeAsteroid(asteroid, bullet = null) {
+    const radius = Math.max(200, asteroid.radius * 7, bullet ? 105 + this.state.powers.charged * 12 : 0);
+    if (bullet) this.explodeChargedShot(bullet, asteroid.x, asteroid.y, radius);
+    this.state.entities.rings.push({ kind: 'asteroidBlast', x: asteroid.x, y: asteroid.y, maxRadius: radius, life: .9, duration: .9, color: '#ffac59' });
+    this.state.shake = Math.max(this.state.shake, 14);
+    this.burst(asteroid.x, asteroid.y, '#ffac59', 54, 2.6);
+    this.audio.play(85, .42, 'sawtooth', .09);
+  }
+
+  explodeChargedShot(bullet, x, y, radius = 105 + this.state.powers.charged * 12) {
     for (const enemy of this.state.entities.enemies) if (distance({ x, y }, enemy) < radius + enemy.radius) enemy.hp -= bullet.damage * .72;
     this.state.entities.rings.push({ kind: 'charged', x, y, maxRadius: radius, life: .6, duration: .6, color: '#ffd174' });
     this.burst(x, y, '#ffd174', 42, 1.8);
@@ -736,7 +788,7 @@ export class Game {
           enemy.shootTimer = Math.max(1.35, 3.2 - this.threatLevel() * .35);
         }
         if (enemy.type === 'tank' && enemy.specialTimer <= 0 && currentDistance < 190) {
-          this.firePattern(enemy, enemy.pulse, 8, TAU / 8, 135, 7);
+          this.firePattern(enemy, direction, 4, Math.PI / 3, 135, 7);
           enemy.specialTimer = 4.6;
         }
       }
@@ -745,7 +797,7 @@ export class Game {
 
   firePattern(enemy, direction, count, spread, speed, damage) {
     const state = this.state;
-    const scaledDamage = damage * (1 + this.threatLevel() * .08);
+    const scaledDamage = damage * (1 + this.threatLevel() * .08) * (enemy.projectileDamageMultiplier ?? 1);
     for (let shot = 0; shot < count; shot += 1) {
       const offset = count === 1 ? 0 : (shot - (count - 1) / 2) * spread;
       const angle = direction + offset;
@@ -783,11 +835,12 @@ export class Game {
       this.firePattern(boss, direction, broadside, boss.adaptive?.barrage ? .15 : .2, 180, 12);
       boss.shootTimer = boss.adaptive?.agile ? 1.15 : 1.55;
     }
+    boss.shootTimer *= boss.attackIntervalMultiplier ?? 1;
   }
 
   fireMiniBossPattern(boss, direction) {
     if (boss.miniVariant.id === 'bomber') {
-      this.firePattern(boss, boss.pulse, 10, TAU / 10, 150, 8);
+      this.firePattern(boss, direction, 5, Math.PI / 4, 150, 8);
       boss.shootTimer = 2.25;
     } else if (boss.miniVariant.id === 'seeker') {
       this.firePattern(boss, direction, 5, .13, 225, 8);
@@ -921,28 +974,15 @@ export class Game {
     if (state.level >= 3 && state.level % 3 === 0 && state.level % 4 !== 0) {
       const variants = this.unlockedMiniBossVariants();
       const variant = variants[Math.max(0, Math.floor(state.level / 3) - 1) % variants.length];
-      this.spawn('miniboss', { variant });
-      this.label(this.renderer.width / 2, this.renderer.height * .24, `⚠ MINI-CHEFE · ${variant.name}`, variant.color);
+      if (this.spawnMiniBoss(variant)) state.minibossTimer = Math.max(state.minibossTimer, 16);
     }
     this.label(state.player.x, state.player.y - 40, `REPARO 50% DO CASCO · +${hpRestored} VIDA`, '#80ffc2');
     this.label(this.renderer.width / 2, this.renderer.height * .32, `⚠ HORDA DO NÍVEL ${state.level}`, '#ffba74');
     if (reward.credits) this.label(this.renderer.width / 2, this.renderer.height * .37, `+${reward.credits} CRÉDITOS`, '#ffe687');
     for (const skill of reward.unlocked) this.label(this.renderer.width / 2, this.renderer.height * .42, `HABILIDADE DESBLOQUEADA · ${skill.name}`, '#8df4ff');
     state.mode = 'choice';
-    const eligibleUpgrades = UPGRADES.filter(upgrade => !upgrade.special && (state.upgradeLevels[upgrade.key] ?? 0) < upgrade.maxLevel && (!upgrade.available || upgrade.available(state.player)));
-    const eligiblePowers = this.availableRunPowers();
-    const candidates = [...eligibleUpgrades, ...eligiblePowers];
-    const choiceCount = Math.min(3, candidates.length);
     const recent = state.recentChoiceKeys ?? [];
-    const freshCandidates = candidates.filter(choice => !recent.includes(choice.key));
-    const choices = pickChoices(freshCandidates.length >= choiceCount ? freshCandidates : candidates, choiceCount);
-    const newlyUnlockedPower = reward.unlocked
-      .map(skill => eligiblePowers.find(power => power.key === skill.key))
-      .find(Boolean);
-    if (newlyUnlockedPower && !choices.some(choice => choice.key === newlyUnlockedPower.key)) {
-      if (choices.length < choiceCount) choices.push(newlyUnlockedPower);
-      else if (choices.length) choices[Math.floor(Math.random() * choices.length)] = newlyUnlockedPower;
-    }
+    const choices = pickLevelChoices(state, this.availableRunPowers(), reward.unlocked);
     if (!choices.length) {
       this.finishChoice();
       return;
@@ -969,7 +1009,7 @@ export class Game {
       return;
     }
     if (choice.apply) {
-      if ((state.upgradeLevels[choice.key] ?? 0) >= choice.maxLevel || (choice.available && !choice.available(state.player))) return;
+      if (!isUpgradeAvailable(choice, state)) return;
       choice.apply(state.player, state);
       state.upgradeLevels[choice.key] = (state.upgradeLevels[choice.key] ?? 0) + 1;
     } else if (choice.key) this.grantPower(choice);
@@ -1135,7 +1175,7 @@ export class Game {
 
   dash() { const state = this.state; if (!state || state.mode !== 'playing' || state.player.dash > 0) return; const player = state.player; player.dash = player.dashCooldown; player.dashTime = player.dashDuration; player.invulnerable = Math.max(player.invulnerable, .42); this.burst(player.x, player.y, '#7ffaff', 22, 1.3); this.audio.play(280, .18, 'sawtooth', .06); }
 
-  hurt(amount) { const state = this.state; if (!state || state.mode !== 'playing') return; const { player } = state; if (player.invulnerable > 0 || player.dashTime > 0 || state.shieldTime > 0 || state.activeShieldTime > 0) return; const damage = Math.max(1, amount * (1 - player.armor)); player.hp = Math.max(0, player.hp - damage); player.invulnerable = .55; state.shake = 11; state.flash = .22; this.burst(player.x, player.y, '#ff587e', 15); this.label(player.x, player.y - 25, `-${Math.round(damage)}`, '#ff8098'); this.audio.play(180, .16, 'sawtooth', .065); if (player.hp <= 0) this.gameOver(); }
+  hurt(amount) { const state = this.state; if (!state || state.mode !== 'playing') return; const { player } = state; if (player.invulnerable > 0 || player.dashTime > 0 || state.shieldTime > 0 || state.activeShieldTime > 0) return; const damage = Math.max(1, amount * (1 - player.armor)); player.hp = Math.max(0, player.hp - damage); player.invulnerable = .55; state.shake = Math.max(state.shake, 11); state.flash = .22; this.burst(player.x, player.y, '#ff587e', 15); this.combatLabel(player.x, player.y - 25, `-${Math.round(damage)}`, '#ff8098'); this.audio.play(180, .16, 'sawtooth', .065); if (player.hp <= 0) this.gameOver(); }
 
   gameOver() { this.finishRun(this.state.stageCompleted ? 'stage-complete' : 'defeat'); }
 
@@ -1154,5 +1194,29 @@ export class Game {
 
   togglePause() { if (!this.state || !['playing', 'paused'].includes(this.state.mode)) return; this.state.mode = this.state.mode === 'playing' ? 'paused' : 'playing'; this.lastTime = performance.now(); this.ui.setPaused?.(this.state.mode === 'paused'); }
   burst(x, y, color, amount = 12, power = 1) { const particles = this.state.entities.particles; for (let index = 0; index < amount; index += 1) { const angle = random(0, TAU); const speed = random(30, 180) * power; const life = random(.25, .7); particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life, maxLife: life, radius: random(1, 4), color }); } if (particles.length > 430) particles.splice(0, particles.length - 430); }
-  label(x, y, text, color = '#fff') { this.state.entities.floaters.push({ x, y, text, color, life: .85 }); }
+  updateNotifications(delta) {
+    const state = this.state;
+    // Only visible messages age: announcements queued at level-up stay readable.
+    for (const message of state.notifications.slice(0, 2)) message.life -= delta;
+    state.notifications = state.notifications.filter(message => message.life > 0);
+    state.recentNotifications = state.recentNotifications.filter(message => state.time - message.time < 8);
+  }
+
+  label(_x, _y, text, color = '#fff') {
+    const state = this.state;
+    if (state.recentNotifications.some(message => message.text === text && state.time - message.time < 8)) return;
+    state.recentNotifications.push({ text, time: state.time });
+    if (state.recentNotifications.length > 24) state.recentNotifications.shift();
+    const priority = /⚠|☢|DESBLOQUEAD|CRÉDITOS|DESTRUÍDO|ONDA|REPARO 50/.test(text);
+    const message = { text, color, life: 3.2, duration: 3.2, priority };
+    if (priority) state.notifications.splice(0, 0, message);
+    else state.notifications.push(message);
+    if (state.notifications.length > 6) state.notifications.pop();
+  }
+
+  combatLabel(x, y, text, color = '#fff') {
+    const floaters = this.state.entities.floaters;
+    floaters.push({ x, y, text, color, life: .85 });
+    if (floaters.length > 60) floaters.shift();
+  }
 }

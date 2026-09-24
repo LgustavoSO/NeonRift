@@ -3,13 +3,13 @@ import test from 'node:test';
 import { createGameState } from '../src/core/state.js';
 import { buyShipUpgrade, buySuperpowerUpgrade, createDefaultProfile, normalizeProfile, rewardLevel } from '../src/core/profile.js';
 import { BOSS_SCHEDULE, COMPANION_MODELS, collectorReturnDelay, MAX_COMPANION_LEVEL, MAX_PERMANENT_UPGRADE_LEVEL, MAX_RUN_LEVEL, SHIP_UPGRADES, TOTAL_BOSSES } from '../src/data/hangar.js';
-import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, unlockedEnemyTypes, unlockedMiniBossVariants } from '../src/data/enemy-progression.js';
-import { PERMANENT_POWER_UPGRADES, POWERS, UPGRADES, pickChoices } from '../src/data/upgrades.js';
+import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, lateBossStats, unlockedEnemyTypes, unlockedMiniBossVariants } from '../src/data/enemy-progression.js';
+import { PERMANENT_POWER_UPGRADES, POWERS, UPGRADES, isUpgradeAvailable, pickChoices, pickLevelChoices } from '../src/data/upgrades.js';
 import { getChoiceNextEffect, getChoiceProgress } from '../src/data/choice-details.js';
 import { getHordeProgress } from '../src/data/horde-progress.js';
 import { RUN_RULES } from '../src/data/game-rules.js';
 import { Game } from '../src/game/Game.js';
-import { shieldStats } from '../src/data/power-stats.js';
+import { firewheelStats, shieldStats } from '../src/data/power-stats.js';
 import { segmentCircleEntry } from '../src/core/math.js';
 import { UIController } from '../src/ui/UIController.js';
 
@@ -40,6 +40,208 @@ test('choice randomizer shuffles without replacement and never mutates the sourc
   assert.equal(new Set(first).size, 3);
   assert.deepEqual(source, ['a', 'b', 'c', 'd']);
   assert.notDeepEqual(first, second);
+});
+
+test('level offers reserve an eligible companion and only occasionally include one superpower', () => {
+  const state = createGameState(1024, 768);
+  let seed = 612;
+  const random = () => { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; };
+  let powerOffers = 0;
+  for (let roll = 0; roll < 1000; roll += 1) {
+    const choices = pickLevelChoices(state, POWERS, [], random);
+    assert.equal(choices.length, 3);
+    assert.equal(new Set(choices.map(choice => choice.key)).size, 3);
+    assert.ok(choices.some(choice => choice.key === 'companion'));
+    const powers = choices.filter(choice => !choice.apply && choice.key !== 'companion');
+    assert.ok(powers.length <= 1);
+    powerOffers += powers.length;
+    state.recentChoiceKeys = choices.map(choice => choice.key);
+  }
+  assert.ok(powerOffers > 200 && powerOffers < 300, `Expected about 25%, got ${powerOffers / 10}%`);
+  const unlock = pickLevelChoices(state, POWERS, [{ key: 'riftLance' }], random);
+  assert.ok(unlock.some(choice => choice.key === 'riftLance'));
+  assert.ok(unlock.some(choice => choice.key === 'companion'));
+});
+
+test('effective attribute caps and exhausted pools never produce useless or stale upgrades', () => {
+  const game = createHarness();
+  Object.assign(game.state.player, { crit: .6, slow: .65, armor: .35, shots: 6, dashCooldown: 1.25 });
+  game.state.firewheelLevel = 3;
+  game.state.mode = 'choice';
+  for (const key of ['critical', 'slow', 'armor', 'shots', 'dash', 'firewheel']) {
+    const upgrade = UPGRADES.find(item => item.key === key);
+    assert.equal(isUpgradeAvailable(upgrade, game.state), false, key);
+    game.applyChoice(upgrade);
+    assert.equal(game.state.upgradeLevels[key], undefined);
+    assert.equal(game.state.mode, 'choice');
+  }
+  game.state.upgradeLevels = Object.fromEntries(UPGRADES.map(item => [item.key, item.maxLevel]));
+  const powersOnly = pickLevelChoices(game.state, POWERS.filter(power => power.key !== 'companion'));
+  assert.equal(powersOnly.length, 1);
+  game.state.powers = Object.fromEntries(POWERS.map(item => [item.key, 1]));
+  assert.deepEqual(pickLevelChoices(game.state, POWERS.filter(power => power.key !== 'companion')), []);
+  for (const model of COMPANION_MODELS.slice(0, 4)) game.addCompanion(model, MAX_COMPANION_LEVEL);
+  game.profile.unlockedSkills = POWERS.map(power => power.key);
+  assert.deepEqual(game.availableRunPowers(), []);
+});
+
+test('late Guardians gain health, contact damage, projectile damage and faster attacks', () => {
+  for (const level of [20, 24, 28, 32]) {
+    const game = createHarness();
+    game.state.level = level;
+    let baseHp; let baseDamage;
+    game.spawn = function (...args) {
+      const boss = Game.prototype.spawn.call(this, ...args);
+      baseHp = boss.hp; baseDamage = boss.damage;
+      return boss;
+    };
+    game.spawnBoss();
+    const boss = game.state.entities.enemies[0];
+    const stats = lateBossStats(level);
+    assert.equal(boss.hp, baseHp * (1 + (level - 4) * .045) * (level === 32 ? 1.65 : 1) * stats.health);
+    assert.equal(boss.maxHp, boss.hp);
+    assert.equal(boss.damage, baseDamage * stats.damage);
+    game.firePattern(boss, 0, 1, 0, 100, 10);
+    assert.equal(game.state.entities.enemyBullets[0].damage, 10 * (1 + game.threatLevel() * .08) * stats.damage);
+    game.fireBossPattern(boss, 0);
+    const baseline = { ...boss, finalAttackMode: false, attackIntervalMultiplier: 1 };
+    game.fireBossPattern(baseline, 0);
+    assert.equal(boss.shootTimer, baseline.shootTimer * stats.attackInterval);
+  }
+});
+
+test('minibosses enter ordinary waves, respect unlocks and stop at two or during Guardians and breaks', () => {
+  const game = createHarness();
+  game.spawn = Game.prototype.spawn;
+  game.state.minibossTimer = 0;
+  game.updateMiniBossSpawns(.1);
+  assert.equal(game.state.entities.enemies.length, 1);
+  assert.ok(game.state.minibossTimer >= 22);
+  assert.equal(game.state.entities.enemies[0].miniVariant.id, unlockedMiniBossVariants(0)[0].id);
+  game.state.minibossTimer = 0;
+  game.updateMiniBossSpawns(.1);
+  game.state.minibossTimer = 0;
+  game.updateMiniBossSpawns(.1);
+  assert.equal(game.state.entities.enemies.length, 2);
+  game.state.entities.enemies = [];
+  game.state.waveBreak = 4;
+  game.state.minibossTimer = 5;
+  game.updateMiniBossSpawns(10);
+  assert.equal(game.state.minibossTimer, 5);
+  game.state.entities.enemies = Array.from({ length: RUN_RULES.enemyCap }, () => ({ type: 'grunt', hp: 1 }));
+  assert.equal(game.spawnMiniBoss(), false);
+  game.state.waveBreak = 0;
+  game.state.entities.enemies.push({ type: 'boss', hp: 100 });
+  game.updateMiniBossSpawns(10);
+  assert.equal(game.state.minibossTimer, 5);
+});
+
+test('tank and bomber volleys use half as many bullets in the hemisphere facing the player', () => {
+  for (const direction of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const game = createHarness();
+    const { player } = game.state;
+    const tank = Game.prototype.spawn.call(game, 'tank');
+    Object.assign(tank, { x: player.x - Math.cos(direction) * 150, y: player.y - Math.sin(direction) * 150, speed: 0, elite: false, shootTimer: 0, specialTimer: 0 });
+    game.updateEnemies(0);
+    assert.equal(game.state.entities.enemyBullets.length, 4);
+    for (const bullet of game.state.entities.enemyBullets) assert.ok(bullet.vx * Math.cos(direction) + bullet.vy * Math.sin(direction) >= -1e-8);
+    game.state.entities.enemyBullets = [];
+    game.fireMiniBossPattern({ ...tank, type: 'miniboss', miniVariant: { id: 'bomber' } }, direction);
+    assert.equal(game.state.entities.enemyBullets.length, 5);
+    for (const bullet of game.state.entities.enemyBullets) assert.ok(bullet.vx * Math.cos(direction) + bullet.vy * Math.sin(direction) >= -1e-8);
+  }
+});
+
+test('asteroids spawn on all four edges and vertical arrivals are culled only after exiting', t => {
+  for (const randomValue of [.1, .3, .6, .9]) {
+    t.mock.method(Math, 'random', () => randomValue);
+    const game = createHarness();
+    game.state.asteroidTimer = 0;
+    game.updateWorldHazards(0);
+    const asteroid = game.state.entities.asteroids[0];
+    if (randomValue < .25) assert.ok(asteroid.x < 0 && asteroid.vx > 0);
+    else if (randomValue < .5) assert.ok(asteroid.x > 1024 && asteroid.vx < 0);
+    else if (randomValue < .75) assert.ok(asteroid.y < 0 && asteroid.vy > 0);
+    else assert.ok(asteroid.y > 768 && asteroid.vy < 0);
+    t.mock.restoreAll();
+  }
+  const game = createHarness();
+  game.state.entities.asteroids.push({ x: 100, y: -160, vx: 0, vy: 300, spin: 0, radius: 24 });
+  game.updateWorldHazards(.04);
+  assert.equal(game.state.entities.asteroids.length, 1);
+  game.state.entities.asteroids[0].y = 900;
+  game.updateWorldHazards(.04);
+  assert.equal(game.state.entities.asteroids.length, 0);
+});
+
+test('asteroid impact has a large shockwave but does not add extra damage to the player', () => {
+  const game = createHarness();
+  const { player, entities } = game.state;
+  entities.asteroids.push({ x: player.x, y: player.y, radius: 30, vx: 0, vy: 0, spin: 0 });
+  game.updateWorldHazards(0);
+  assert.equal(player.hp, 67);
+  assert.equal(entities.asteroids.length, 0);
+  assert.equal(entities.rings.find(ring => ring.kind === 'asteroidBlast').maxRadius, 210);
+  assert.equal(game.state.shake, 14);
+});
+
+test('fire ring damage, visible pulse and upgrade preview share the expanded radius', () => {
+  const game = createHarness();
+  const { player, entities } = game.state;
+  game.state.firewheelLevel = 1;
+  const stats = firewheelStats(1);
+  const within = { x: player.x + 130, y: player.y, radius: 5, hp: 100 };
+  const outside = { x: player.x + 150, y: player.y, radius: 5, hp: 100 };
+  entities.enemies.push(within, outside);
+  game.updatePowers(.01);
+  assert.equal(within.hp, 100 - player.damage * stats.damage);
+  assert.equal(outside.hp, 100);
+  assert.equal(entities.rings.find(ring => ring.kind === 'firewheel').maxRadius, stats.radius);
+  assert.match(getChoiceNextEffect(UPGRADES.find(item => item.key === 'firewheel'), game.state), /134 → 158 px/);
+});
+
+test('communications are bounded, deduplicated and queued separately from combat numbers', () => {
+  const game = createHarness();
+  game.label = Game.prototype.label;
+  game.label(100, 100, 'TEMPESTADE IÔNICA');
+  game.label(100, 100, 'TEMPESTADE IÔNICA');
+  assert.equal(game.state.notifications.length, 1);
+  for (let index = 0; index < 10; index += 1) game.label(100, 100, `AVISO ${index}`);
+  assert.equal(game.state.notifications.length, 6);
+  assert.equal(game.state.entities.floaters.length, 0);
+  game.updateNotifications(1);
+  assert.equal(game.state.notifications[2].life, 3.2);
+  assert.equal(game.state.notifications[0].life, 2.2);
+  game.label(0, 0, '⚠ GUARDIÃO');
+  assert.equal(game.state.notifications[0].text, '⚠ GUARDIÃO');
+  game.combatLabel(100, 100, '-10');
+  assert.equal(game.state.entities.floaters.length, 1);
+});
+
+test('Singularity retains Hangar-only 40–20s recharge and half-radius suction', () => {
+  const game = createHarness();
+  for (const [rank, cooldown] of [[0, 40], [5, 30], [10, 20]]) {
+    game.state.powerBonuses = { singularity: rank };
+    game.state.level = 32;
+    assert.equal(game.singularityCooldownForHangar(), cooldown);
+  }
+  game.state.powers.singularity = 1;
+  const field = { x: 200, y: 200, duration: 2.4 };
+  game.activateSingularity(field);
+  assert.equal(field.suctionRadius, 127);
+  const nearbyXp = { x: 260, y: 200, value: 2 };
+  const farXp = { x: 340, y: 200, value: 2 };
+  const farBullet = { x: 340, y: 200, vx: 0, vy: 100 };
+  game.state.entities.gems.push(nearbyXp, farXp);
+  game.state.entities.enemyBullets.push({ x: 201, y: 200, vx: 0, vy: 100 }, farBullet);
+  game.pullSingularityEntities(1, field);
+  game.pullSingularityEntities(.01, field);
+  assert.equal(nearbyXp.x, 200);
+  assert.equal(nearbyXp.singularityParked, true);
+  assert.equal(farXp.x, 340);
+  assert.deepEqual(game.state.entities.enemyBullets, [farBullet]);
+  assert.equal(farBullet.vy, 100);
+  assert.equal(game.state.entities.gems.length, 2);
 });
 
 test('horde progress reflects combat, cleanup, a cleared field, and the regroup break', () => {

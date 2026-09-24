@@ -13,7 +13,7 @@ import { InputController } from '/src/input/InputController.js';
 import { UIController } from '/src/ui/UIController.js';
 import { Game } from '/src/game/Game.js';
 import { createDefaultProfile } from '/src/core/profile.js';
-import { POWERS, UPGRADES } from '/src/data/upgrades.js';
+import { POWERS, UPGRADES, pickLevelChoices } from '/src/data/upgrades.js';
 import { COMPANION_MODELS } from '/src/data/hangar.js';
 
 const template = new DOMParser().parseFromString(await (await fetch('/index.html')).text(), 'text/html');
@@ -33,9 +33,38 @@ function scenario(name, action) {
   controls.append(button);
 }
 function start() {
+  game.update = Game.prototype.update;
   game.profile = createDefaultProfile();
   game.start();
 }
+scenario('QA Efeitos', () => {
+  start();
+  const { player, entities } = game.state;
+  game.state.firewheelLevel = 3;
+  game.state.powers.riftLance = 1;
+  const enemy = game.spawn('tank');
+  Object.assign(enemy, { x: player.x + Math.min(230, innerWidth * .3), y: player.y - 100 });
+  game.updatePowers(0);
+  game.explodeAsteroid({ x: player.x - Math.min(260, innerWidth * .3), y: player.y + 20, radius: 32 });
+  for (const ring of entities.rings) ring.life = ring.duration * .68;
+  game.label(0, 0, '⚠ MINI-CHEFE · BOMBARDEIRO', '#ffae73');
+  game.label(0, 0, 'PEREGRINO · EXPERIÊNCIA ENTREGUE', '#75f4ff');
+  // Freeze simulation, not rendering, for repeatable visual inspection.
+  game.update = () => {};
+});
+scenario('QA Sorteio', () => {
+  start();
+  game.profile.unlockedSkills = POWERS.map(power => power.key);
+  game.state.mode = 'choice';
+  ui.showUpgrade(game.state, pickLevelChoices(game.state, game.availableRunPowers()), choice => game.applyChoice(choice));
+});
+scenario('QA Esquadrão', () => {
+  start();
+  game.addCompanion(COMPANION_MODELS[0], 5);
+  game.addCompanion(COMPANION_MODELS[1], 2);
+  game.state.mode = 'choice';
+  ui.showCompanionUpgrade(game.state, target => { game.grantPower({ key: 'companion', ...target }); game.finishChoice(); });
+});
 scenario('QA Escolhas', () => {
   start();
   game.state.mode = 'choice';

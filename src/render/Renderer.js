@@ -1,6 +1,7 @@
 import { TAU, clamp, hexagon } from '../core/math.js';
 import { MAX_COMPANION_LEVEL, TOTAL_BOSSES } from '../data/hangar.js';
 import { getHordeProgress } from '../data/horde-progress.js';
+import { firewheelStats } from '../data/power-stats.js';
 
 export class Renderer {
   constructor(canvas) {
@@ -10,6 +11,7 @@ export class Renderer {
     this.height = innerHeight;
     this.dpr = 1;
     this.stars = [];
+    this.coarsePointer = matchMedia('(pointer: coarse)');
     this.resize();
     addEventListener('resize', () => this.resize());
   }
@@ -40,6 +42,7 @@ export class Renderer {
     if (pointer.active && state.mode === 'playing') this.drawReticle(context, pointer, now);
     if (state.flash > 0) { context.fillStyle = `rgba(255,60,100,${state.flash * .42})`; context.fillRect(0, 0, width, height); }
     if (state.mode !== 'menu') this.drawHud(context, state, bestScore, width);
+    if (state.mode === 'playing') this.drawNotifications(context, state);
   }
 
   drawBackdrop(context, state, pointer, now) {
@@ -84,11 +87,12 @@ export class Renderer {
     for (const asteroid of asteroids) this.drawAsteroid(context, asteroid);
     for (const heal of heals) this.drawHeal(context, heal, now);
     for (const mine of mines) this.drawMine(context, mine, now);
-    for (const ring of rings) this.drawRing(context, ring, now);
+    for (const ring of rings) if (ring.kind !== 'riftLance') this.drawRing(context, ring, now);
     for (const gem of gems) { context.shadowBlur = 14; context.shadowColor = '#6bffed'; context.fillStyle = '#69f8dd'; hexagon(context, gem.x, gem.y, gem.radius, now * .001); context.fill(); }
     for (const bullet of bullets) this.drawBullet(context, bullet);
     for (const bullet of enemyBullets) this.drawEnemyBullet(context, bullet);
     for (const enemy of enemies) this.drawEnemy(context, enemy, now);
+    for (const ring of rings) if (ring.kind === 'riftLance') this.drawRing(context, ring, now);
     if (state.singularityField) this.drawSingularityField(context, state.singularityField, now);
     if (state.powers.aimbot && state.aimTarget && enemies.includes(state.aimTarget)) {
       context.save(); context.strokeStyle = '#ffd45c65'; context.lineWidth = 1; context.setLineDash([4, 8]); context.beginPath(); context.moveTo(player.x, player.y); context.lineTo(state.aimTarget.x, state.aimTarget.y); context.stroke(); context.setLineDash([]); context.restore();
@@ -104,6 +108,11 @@ export class Renderer {
   }
 
   drawAsteroid(context, asteroid) {
+    const angle = Math.atan2(asteroid.vy, asteroid.vx);
+    context.save(); context.translate(asteroid.x, asteroid.y); context.rotate(angle);
+    const trail = context.createLinearGradient(-asteroid.radius * 4, 0, 0, 0);
+    trail.addColorStop(0, '#ff6b2400'); trail.addColorStop(1, '#ffb56270');
+    context.fillStyle = trail; context.beginPath(); context.moveTo(-asteroid.radius * 4, 0); context.lineTo(0, -asteroid.radius * .7); context.lineTo(0, asteroid.radius * .7); context.closePath(); context.fill(); context.restore();
     context.save(); context.translate(asteroid.x, asteroid.y); context.rotate(asteroid.spin); context.shadowBlur = 23; context.shadowColor = '#ff995f'; context.fillStyle = '#534558'; context.strokeStyle = '#ffa765'; context.lineWidth = 3;
     context.beginPath(); for (let i = 0; i < 9; i += 1) { const angle = i * TAU / 9; const radius = asteroid.radius * (i % 3 === 0 ? .78 : 1); context[i ? 'lineTo' : 'moveTo'](Math.cos(angle) * radius, Math.sin(angle) * radius); } context.closePath(); context.fill(); context.stroke(); context.restore();
   }
@@ -140,7 +149,37 @@ export class Renderer {
   drawRing(context, ring, now) {
     const progress = 1 - ring.life / ring.duration;
     context.save(); context.globalAlpha = clamp(ring.life / ring.duration, 0, 1); context.strokeStyle = ring.color; context.shadowBlur = 28; context.shadowColor = ring.color;
-    if (ring.kind === 'ion') {
+    if (ring.kind === 'riftLance') {
+      const dx = ring.x - ring.originX; const dy = ring.y - ring.originY;
+      const length = Math.hypot(dx, dy);
+      context.translate(ring.originX, ring.originY); context.rotate(Math.atan2(dy, dx));
+      context.lineCap = 'round'; context.strokeStyle = '#b357ff'; context.lineWidth = 14 * (1 - progress) + 2;
+      context.beginPath(); context.moveTo(12, 0); context.lineTo(length, 0); context.stroke();
+      context.strokeStyle = '#ffeaff'; context.lineWidth = 2.5;
+      context.beginPath(); context.moveTo(12, 0); context.lineTo(length, 0); context.stroke();
+      // White spearhead extends through the impact, distinct from ion lightning.
+      const head = length + progress * 24;
+      context.fillStyle = '#fff2ff'; context.beginPath(); context.moveTo(head + 17, 0); context.lineTo(head - 35, -9); context.lineTo(head - 24, 0); context.lineTo(head - 35, 9); context.closePath(); context.fill();
+      context.strokeStyle = '#ffb8ff'; context.lineWidth = 2;
+      context.beginPath(); context.moveTo(length, -ring.maxRadius * progress); context.lineTo(length, ring.maxRadius * progress); context.stroke();
+    } else if (ring.kind === 'asteroidBlast' || ring.kind === 'firewheel') {
+      const asteroid = ring.kind === 'asteroidBlast';
+      const radius = ring.maxRadius * Math.min(1, progress * (asteroid ? 2 : 3));
+      const glow = context.createRadialGradient(ring.x, ring.y, 0, ring.x, ring.y, Math.max(1, radius));
+      glow.addColorStop(0, asteroid ? '#fff0b888' : '#ff621800');
+      glow.addColorStop(.65, '#ff6b2430'); glow.addColorStop(.9, '#ff9f5e88'); glow.addColorStop(1, '#ffc26c00');
+      context.shadowBlur = 0; context.fillStyle = glow; context.beginPath(); context.arc(ring.x, ring.y, radius, 0, TAU); context.fill();
+      context.strokeStyle = '#ffac59'; context.lineWidth = (asteroid ? 16 : 11) * (1 - progress) + 2;
+      context.beginPath(); context.arc(ring.x, ring.y, radius, 0, TAU); context.stroke();
+      context.strokeStyle = '#fff3c0'; context.lineWidth = 2;
+      context.beginPath(); context.arc(ring.x, ring.y, radius * .9, 0, TAU); context.stroke();
+      for (let ray = 0; ray < 18; ray += 1) {
+        const angle = ray * TAU / 18 + (asteroid ? 0 : now * .001);
+        const reach = radius * (asteroid ? .6 : .85);
+        context.beginPath(); context.moveTo(ring.x + Math.cos(angle) * reach, ring.y + Math.sin(angle) * reach);
+        context.lineTo(ring.x + Math.cos(angle + .025) * radius, ring.y + Math.sin(angle + .025) * radius); context.stroke();
+      }
+    } else if (ring.kind === 'ion') {
       const dx = ring.x - ring.originX; const dy = ring.y - ring.originY; const length = Math.hypot(dx, dy) || 1; const nx = -dy / length; const ny = dx / length;
       context.lineWidth = 7; context.beginPath(); context.moveTo(ring.originX, ring.originY); context.lineTo(ring.x, ring.y); context.stroke();
       context.strokeStyle = '#efffff'; context.lineWidth = 2.2; context.beginPath(); context.moveTo(ring.originX, ring.originY);
@@ -158,7 +197,7 @@ export class Renderer {
   drawSingularityField(context, field, now) {
     const charging = field.phase === 'charging';
     const progress = charging
-      ? 1 - clamp(field.timer / 1.5, 0, 1)
+      ? 1 - clamp(field.timer, 0, 1)
       : 1 - clamp(field.timer / field.duration, 0, 1);
     const pulse = .5 + Math.sin(now * .012) * .5;
     const radius = charging ? 24 + progress * 18 : 31 + pulse * 7;
@@ -181,6 +220,16 @@ export class Renderer {
       context.beginPath();
       context.ellipse(0, 0, radius * (1 - orbit * .18), radius * .56, now * .0014 * (orbit ? -1 : 1), now * .002 + orbit * Math.PI, now * .002 + orbit * Math.PI + Math.PI * 1.55);
       context.stroke();
+    }
+    if (!charging && field.suctionRadius) {
+      context.globalAlpha = .16;
+      context.strokeStyle = '#d9b7ff';
+      context.lineWidth = 1;
+      context.setLineDash([3, 8]);
+      context.beginPath();
+      context.arc(0, 0, field.suctionRadius, 0, TAU);
+      context.stroke();
+      context.setLineDash([]);
     }
     if (!charging) {
       for (let ray = 0; ray < 8; ray += 1) {
@@ -215,6 +264,17 @@ export class Renderer {
   drawPowerEffects(context, state, now) {
     const { player } = state;
     context.save(); context.translate(player.x, player.y);
+    if (state.firewheelLevel) {
+      const { radius, interval } = firewheelStats(state.firewheelLevel);
+      const charge = 1 - clamp(state.firewheelTimer / interval, 0, 1);
+      context.globalAlpha = .2 + charge * .25; context.strokeStyle = '#ffad5f'; context.shadowBlur = 0; context.lineWidth = 1;
+      context.setLineDash([3, 9]); context.beginPath(); context.arc(0, 0, radius, 0, TAU); context.stroke(); context.setLineDash([]);
+      context.globalAlpha = .65; context.shadowBlur = 10; context.shadowColor = '#ff862e'; context.strokeStyle = '#ffc97f'; context.lineWidth = 3;
+      for (let flame = 0; flame < 8; flame += 1) {
+        const angle = now * .001 + flame * TAU / 8;
+        context.beginPath(); context.arc(0, 0, radius, angle, angle + .07 + charge * .08); context.stroke();
+      }
+    }
     if (state.shieldTime > 0 || state.activeShieldTime > 0) {
       const pulse = Math.sin(now * .009) * 2; const alpha = .7 + .3 * Math.sin(now * .012);
       context.globalAlpha = alpha; context.strokeStyle = '#83ffc7'; context.shadowBlur = 24; context.shadowColor = '#59ffb4'; context.lineWidth = 2;
@@ -228,6 +288,41 @@ export class Renderer {
     }
     if (state.powers.overdrive) {
       context.globalAlpha = .58; context.strokeStyle = '#ffb955'; context.shadowBlur = 17; context.shadowColor = '#ff9f2f'; context.lineWidth = 2; context.setLineDash([5, 7]); context.beginPath(); context.arc(0, 0, 30, -now * .002, -now * .002 + Math.PI * 1.7); context.stroke(); context.setLineDash([]);
+    }
+    context.restore();
+  }
+
+  drawNotifications(context, state) {
+    const messages = state.notifications?.slice(0, 2) ?? [];
+    if (!messages.length) return;
+    const width = Math.min(460, this.width - 32);
+    context.save(); context.shadowBlur = 0; context.textAlign = 'left'; context.font = '600 12px system-ui';
+    const rows = messages.map(message => {
+      const lines = [''];
+      for (const word of message.text.split(' ')) {
+        const index = lines.length - 1;
+        const joined = lines[index] ? `${lines[index]} ${word}` : word;
+        if (lines[index] && context.measureText(joined).width > width - 40) lines.push(word);
+        else lines[index] = joined;
+      }
+      return { ...message, lines, height: 18 * lines.length + 16 };
+    });
+    const panelHeight = 26 + rows.reduce((sum, row) => sum + row.height, 0);
+    const x = (this.width - width) / 2;
+    // Clear the mobile joystick/utility controls without covering the ship.
+    const bottom = this.coarsePointer?.matches ? 212 : this.width <= 760 ? 80 : 28;
+    let y = Math.max(8, this.height - bottom - panelHeight);
+    context.fillStyle = '#071321eb'; context.strokeStyle = '#345569'; context.lineWidth = 1;
+    context.beginPath(); context.roundRect(x, y, width, panelHeight, 8); context.fill(); context.stroke();
+    context.fillStyle = '#8aa7b9'; context.font = '700 9px system-ui';
+    context.fillText('COMUNICAÇÕES DE VOO', x + 16, y + 17);
+    y += 26;
+    for (const row of rows) {
+      context.globalAlpha = clamp(row.life / .5, 0, 1);
+      context.fillStyle = row.color; context.fillRect(x + 12, y + 7, 3, row.height - 14);
+      context.fillStyle = row.priority ? '#f2f8ff' : '#c7dbe9'; context.font = `${row.priority ? 700 : 500} 12px system-ui`;
+      row.lines.forEach((line, index) => context.fillText(line, x + 24, y + 19 + index * 18));
+      y += row.height;
     }
     context.restore();
   }

@@ -1,6 +1,6 @@
 import { POWERS } from './upgrades.js';
 import { collectorReturnDelay, MAX_COMPANION_LEVEL, MAX_POWER_TARGETS } from './hangar.js';
-import { shieldStats } from './power-stats.js';
+import { firewheelStats, shieldStats } from './power-stats.js';
 
 const format = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('pt-BR', { maximumFractionDigits: digits });
 const points = value => `${format(value * 100)} p.p.`;
@@ -70,7 +70,11 @@ export function getChoiceNextEffect(choice, state) {
       case 'ricochet': return `+1 perfuração e +${points(Math.min(.6, player.crit + .04) - player.crit)} de chance crítica.`;
       case 'firewheel': {
         const before = state.firewheelLevel ?? 0;
-        return `Anel: raio +15 px, dano +${format(.22)}× e intervalo ${format(Math.max(.65, 1.65 - before * .2))}s → ${format(Math.max(.65, 1.65 - (before + 1) * .2))}s.`;
+        const current = firewheelStats(before);
+        const next = firewheelStats(before + 1);
+        return before === 0
+          ? `Cria um anel com raio de ${next.radius} px, ${format(next.damage)}× dano e pulsos a cada ${format(next.interval)}s.`
+          : `Raio ${current.radius} → ${next.radius} px; dano ${format(current.damage)}× → ${format(next.damage)}×; intervalo ${format(current.interval)}s → ${format(next.interval)}s.`;
       }
       default: return choice.description;
     }
@@ -83,7 +87,7 @@ export function getChoiceNextEffect(choice, state) {
     case 'nova': return `Pulso: raio ${155 + 25 * next} px e ${2 + next}× dano a cada ${format(Math.max(4.5, 10 - next))}s; custa ${Math.min(Math.max(0, player.maxHp - 60), 5 * (state.powerBonuses?.nova ?? 0))} de vida máxima pelo Hangar.`;
     case 'aimbot': return `Mantém o primeiro dos ${player.shots} tiros na mira normal e guia até ${Math.min(MAX_POWER_TARGETS, next, Math.max(0, player.shots - 1))} dos restantes ao alvo mais próximo, sem tiros extras nem perda de dano; cadência −${format((1 - 1 / (1 + .04 * (state.powerBonuses?.aimbot ?? 0))) * 100)}% pelo nível do Hangar.`;
     case 'overdrive': return `+${format((1.12 ** increase - 1) * 100)}% de dano e +${format((player.rate / Math.min(player.rate, Math.max(.07, player.rate * .86 ** increase)) - 1) * 100)}% de cadência; velocidade −${format((1 - Math.max(120, player.move * .97 ** (state.powerBonuses?.overdrive ?? 0)) / player.move) * 100)}% pelo Hangar.`;
-    case 'singularity': { const cooldown = Math.max(10, 20 - (state.powerBonuses?.singularity ?? 0)); return `Marca a mira; após 1s, atrai o XP e o deixa no núcleo; projéteis de toda a arena são engolidos. Recarga atual: ${format(cooldown)}s (−1s por nível no Hangar, mínimo 10s). Inimigos em ${230 + 24 * next} px sofrem ${format(.7 + .2 * next)}× dano e lentidão; custa ${Math.min(Math.max(0, player.maxHp - 60), 3 * (state.powerBonuses?.singularity ?? 0))} de vida máxima.`; }
+    case 'singularity': { const cooldown = Math.max(20, 40 - 2 * (state.powerBonuses?.singularity ?? 0)); return `Marca a mira; após 1s, atrai o XP e o deixa no núcleo, e engole projéteis dentro de ${115 + 12 * next} px (metade do raio). Recarga atual: ${format(cooldown)}s (−2s por nível no Hangar, mínimo 20s). Inimigos em ${230 + 24 * next} px sofrem ${format(.7 + .2 * next)}× dano e lentidão; custa ${Math.min(Math.max(0, player.maxHp - 60), 3 * (state.powerBonuses?.singularity ?? 0))} de vida máxima.`; }
     case 'ionStorm': return `Atinge até ${Math.min(MAX_POWER_TARGETS, next + 2)} alvos com ${format(1.15 + .28 * next)}× dano a cada ${format(Math.max(2.4, 5 - next * .45))}s; blindagem −${points(.02 * (state.powerBonuses?.ionStorm ?? 0))} pelo Hangar.`;
     case 'activeShield': { const stats = shieldStats(next, true); return `Tecla E: proteção por ${format(stats.duration)}s; recarga de ${format(stats.cooldown)}s após terminar.`; }
     case 'teleport': return `Tecla Q: salto de até ${190 + 24 * next} px, ${format(.45)}s de invulnerabilidade; recarga ${format(Math.max(4, 9 - next * .8))}s.`;

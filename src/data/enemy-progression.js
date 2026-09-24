@@ -23,3 +23,10 @@ export function unlockedEnemyTypes(bossesDefeated = 0) {
 export function unlockedMiniBossVariants(bossesDefeated = 0) {
   return MINI_BOSS_VARIANTS.slice(0, unlockCount(bossesDefeated, MINI_BOSS_VARIANTS.length));
 }
+
+export function lateBossStats(level) {
+  if (level < 24) return { health: 1, damage: 1, attackInterval: 1 };
+  if (level < 28) return { health: 1.3, damage: 1.15, attackInterval: .95 };
+  if (level < 32) return { health: 1.5, damage: 1.25, attackInterval: .9 };
+  return { health: 1.8, damage: 1.4, attackInterval: .85 };
+}

@@ -8,6 +8,7 @@ export function createGameState(width, height) {
     waveClock: 0,
     waveBreak: 0,
     spawnTimer: 0,
+    minibossTimer: 16,
     asteroidTimer: 4.5,
     healTimer: 18,
     score: 0,
@@ -27,6 +28,8 @@ export function createGameState(width, height) {
     powers: { companion: 0, shield: 0, charged: 0, nova: 0, aimbot: 0, overdrive: 0, singularity: 0, ionStorm: 0, activeShield: 0, teleport: 0, minefield: 0, riftLance: 0 },
     upgradeLevels: {},
     recentChoiceKeys: [],
+    notifications: [],
+    recentNotifications: [],
     firewheelLevel: 0,
     firewheelTimer: 0,
     minefieldTimer: 0,
@@ -59,6 +62,8 @@ export function resetTransientState(state) {
   for (const collection of Object.values(state.entities)) collection.length = 0;
   state.shake = 0;
   state.flash = 0;
+  state.notifications.length = 0;
+  state.recentNotifications.length = 0;
   state.player.x = state.dimensions.width / 2;
   state.player.y = state.dimensions.height / 2;
 }

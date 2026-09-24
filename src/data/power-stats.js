@@ -10,3 +10,7 @@ export function advanceShield(state, timeKey, cooldownKey, delta) {
   state[timeKey] = Math.max(0, state[timeKey] - delta);
   state[cooldownKey] = Math.max(0, state[cooldownKey] - unprotectedTime);
 }
+
+export function firewheelStats(level) {
+  return { radius: 110 + level * 24, damage: .45 + level * .22, interval: Math.max(.65, 1.65 - level * .2) };
+}

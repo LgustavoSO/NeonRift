@@ -8,13 +8,13 @@ export const UPGRADES = [
   { key: 'shots', icon: '🎯', name: 'Projétil duplicado', description: '+1 disparo por rajada', maxLevel: 5, available: player => player.shots < 6, apply: player => { player.shots = Math.min(6, player.shots + 1); } },
   { key: 'pierce', icon: '🔱', name: 'Perfuração', description: 'Os tiros atravessam mais um inimigo', maxLevel: 4, apply: player => { player.pierce += 1; } },
   { key: 'magnet', icon: '🧲', name: 'Campo magnético', description: 'Aumenta o alcance de coleta de experiência', maxLevel: 4, apply: player => { player.magnet += 80; } },
-  { key: 'slow', icon: '❄️', name: 'Impacto criogênico', description: 'Tiros desaceleram mais os inimigos', maxLevel: 3, apply: player => { player.slow = Math.min(.65, player.slow + .22); } },
-  { key: 'critical', icon: '✨', name: 'Crítico quântico', description: '+12% de chance de causar dano triplo', maxLevel: 4, apply: player => { player.crit = Math.min(.6, player.crit + .12); } },
-  { key: 'dash', icon: '🚀', name: 'Impulso rápido', description: 'Recarga do impulso 18% menor', maxLevel: 4, apply: player => { player.dashCooldown = Math.max(1.25, player.dashCooldown * .82); } },
+  { key: 'slow', icon: '❄️', name: 'Impacto criogênico', description: 'Tiros desaceleram mais os inimigos', maxLevel: 3, available: player => player.slow < .65, apply: player => { player.slow = Math.min(.65, player.slow + .22); } },
+  { key: 'critical', icon: '✨', name: 'Crítico quântico', description: '+12% de chance de causar dano triplo', maxLevel: 4, available: player => player.crit < .6, apply: player => { player.crit = Math.min(.6, player.crit + .12); } },
+  { key: 'dash', icon: '🚀', name: 'Impulso rápido', description: 'Recarga do impulso 18% menor', maxLevel: 4, available: player => player.dashCooldown > 1.25, apply: player => { player.dashCooldown = Math.max(1.25, player.dashCooldown * .82); } },
   { key: 'armor', icon: '🔰', name: 'Placas fotônicas', description: 'Reduz o dano recebido em 7%', maxLevel: 5, available: player => player.armor < .35, apply: player => { player.armor = Math.min(.35, player.armor + .07); } },
   { key: 'projectile', icon: '🛰️', name: 'Canhão de trilho', description: '+18% de velocidade dos projéteis', maxLevel: 4, apply: player => { player.projectileSpeed *= 1.18; } },
   { key: 'ricochet', icon: '🧬', name: 'Matriz de ricochete', description: '+1 perfuração e +4% de chance crítica', maxLevel: 4, apply: player => { player.pierce += 1; player.crit = Math.min(.6, player.crit + .04); } },
-  { key: 'firewheel', icon: '🔥', name: 'Anel de plasma', description: 'Um anel de fogo atinge inimigos que chegam perto', maxLevel: 3, apply: (_player, state) => { state.firewheelLevel += 1; } },
+  { key: 'firewheel', icon: '🔥', name: 'Anel de plasma', description: 'Um amplo anel de fogo atinge inimigos próximos', maxLevel: 3, available: (_player, state) => state.firewheelLevel < 3, apply: (_player, state) => { state.firewheelLevel += 1; } },
   { key: 'companion', icon: '🤖', name: 'Reforço de esquadrão', description: 'Adiciona um aliado ou escolhe um companheiro específico para evoluir', maxLevel: 99, special: true },
 ];
 
@@ -25,7 +25,7 @@ const SUPERPOWER_DEFINITIONS = [
   { icon: '🌌', name: 'Pulso gravitacional', description: 'Uma onda periódica atinge inimigos próximos e destrói projéteis.', tradeoff: 'Consome 5 pontos de vida máxima por nível de hangar.', key: 'nova', baseCost: 65 },
   { icon: '🎯', name: 'Mira automática', description: 'Guia parte dos disparos existentes da nave até o inimigo mais próximo.', tradeoff: 'Reduz a cadência em 4% por nível de hangar.', key: 'aimbot', baseCost: 55 },
   { icon: '⚡', name: 'Sobrecarga', description: 'Aumenta a cadência e o dano da nave.', tradeoff: 'Reduz a velocidade em 3% por nível de hangar.', key: 'overdrive', baseCost: 65 },
-  { icon: '🕳️', name: 'Singularidade', description: 'Marca um ponto na mira; após 1 s, atrai e deixa o XP no núcleo, enquanto engole projéteis hostis. Cada nível do Hangar reduz 1 s da recarga (de 20 s até 10 s).', tradeoff: 'Reduz a vida máxima em 3 pontos por nível de hangar.', key: 'singularity', baseCost: 70 },
+  { icon: '🕳️', name: 'Singularidade', description: 'Marca um ponto na mira; após 1 s, atrai XP e engole projéteis dentro de metade do raio. Cada nível do Hangar reduz 2 s da recarga (de 40 s até 20 s).', tradeoff: 'Reduz a vida máxima em 3 pontos por nível de hangar.', key: 'singularity', baseCost: 70 },
   { icon: '🌩️', name: 'Tempestade iônica', description: 'Raios atingem alvos em sequência automaticamente.', tradeoff: 'Reduz a blindagem em 2% por nível de hangar.', key: 'ionStorm', baseCost: 75 },
   { icon: '🔰', name: 'Barreira manual', description: 'Pressione E para ativar uma proteção temporária de emergência.', key: 'activeShield', baseCost: 75 },
   { icon: '🌀', name: 'Salto de fase', description: 'Pressione Q para se teleportar na direção da mira e escapar de perigo.', key: 'teleport', baseCost: 85 },
@@ -47,4 +47,29 @@ export function pickChoices(source, count = 3, random = Math.random) {
     [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
   }
   return shuffled.slice(0, limit);
+}
+
+export function isUpgradeAvailable(upgrade, state) {
+  return !upgrade.special && (state.upgradeLevels[upgrade.key] ?? 0) < upgrade.maxLevel
+    && (!upgrade.available || upgrade.available(state.player, state));
+}
+
+// A squad slot every level; superpowers are occasional, single-use discoveries.
+// Exhausted pools produce fewer cards, never maxed or duplicate filler cards.
+export function pickLevelChoices(state, availablePowers, unlocked = [], random = Math.random) {
+  const recent = state.recentChoiceKeys ?? [];
+  const skills = UPGRADES.filter(upgrade => isUpgradeAvailable(upgrade, state));
+  const powers = availablePowers.filter(power => power.key !== 'companion' && !state.powers[power.key]);
+  const companion = availablePowers.find(power => power.key === 'companion');
+  const choices = companion ? [companion] : [];
+  const discovery = powers.find(power => unlocked.some(skill => skill.key === power.key));
+  const preferFresh = pool => [
+    ...pickChoices(pool.filter(item => !recent.includes(item.key)), pool.length, random),
+    ...pickChoices(pool.filter(item => recent.includes(item.key)), pool.length, random),
+  ];
+  if (powers.length && (discovery || !skills.length || random() < .25)) {
+    choices.push(discovery ?? preferFresh(powers)[0]);
+  }
+  choices.push(...preferFresh(skills).slice(0, 3 - choices.length));
+  return pickChoices(choices, 3, random);
 }
