@@ -217,9 +217,9 @@ export class Game {
     }
     if (state.powers.nova) { state.novaTimer -= delta; if (state.novaTimer <= 0) { const radius = 155 + state.powers.nova * 25; for (const enemy of entities.enemies) if (distance(player, enemy) < radius) enemy.hp -= player.damage * (2 + state.powers.nova); for (let index = entities.enemyBullets.length - 1; index >= 0; index -= 1) if (distance(player, entities.enemyBullets[index]) < radius) entities.enemyBullets.splice(index, 1); this.burst(player.x, player.y, '#a790ff', 65, 2); entities.rings.push({ kind: 'nova', x: player.x, y: player.y, maxRadius: radius, life: .9, duration: .9, color: '#c4a3ff' }); state.novaTimer = Math.max(4.5, 10 - state.powers.nova); this.audio.play(110, .4, 'triangle', .1); } }
     if (state.powers.singularity) {
-      state.singularityTimer -= delta;
-      if (state.singularityField) {
-        const field = state.singularityField;
+      const field = state.singularityField;
+      if (!field || field.phase === 'pulling') state.singularityTimer = Math.max(0, state.singularityTimer - delta);
+      if (field) {
         field.timer -= delta;
         if (field.phase === 'charging' && field.timer <= 0) this.activateSingularity(field);
         if (field.phase === 'pulling') {
@@ -282,10 +282,14 @@ export class Game {
 
     const pullSpeed = 520 + state.powers.singularity * 40;
     const duration = Math.max(2.4, Math.hypot(this.renderer.width, this.renderer.height) / pullSpeed + .35);
-    state.singularityField = { x, y, phase: 'charging', timer: 1.5, duration };
-    state.singularityTimer = Math.max(4.2, 8 - state.powers.singularity * .7);
+    state.singularityField = { x, y, phase: 'charging', timer: 1, duration };
     this.burst(x, y, '#b78bff', 18, .7);
-    this.label(x, y - 42, 'SINGULARIDADE · COLAPSO EM 1,5s', '#d3aeff');
+    this.label(x, y - 42, 'SINGULARIDADE · COLAPSO EM 1s', '#d3aeff');
+  }
+
+  singularityCooldownForHangar() {
+    const rank = clamp(this.state.powerBonuses?.singularity ?? 0, 0, 10);
+    return 20 - rank;
   }
 
   activateSingularity(field) {
@@ -296,6 +300,7 @@ export class Game {
 
     field.phase = 'pulling';
     field.timer = field.duration;
+    state.singularityTimer = this.singularityCooldownForHangar();
     for (const enemy of entities.enemies) {
       if (distance(field, enemy) > radius + enemy.radius) continue;
       const angle = angleTo(enemy, field);
@@ -321,12 +326,12 @@ export class Game {
       const dy = field.y - gem.y;
       const distanceToField = Math.hypot(dx, dy);
       if (distanceToField <= 14) {
-        if (this.state.level < MAX_RUN_LEVEL) this.state.xp += gem.value;
-        else this.state.score += gem.value * 2;
-        entities.gems.splice(index, 1);
-        this.audio.play(650 + this.state.xp * 4, .045, 'sine', .008);
+        gem.x = field.x;
+        gem.y = field.y;
+        gem.singularityParked = true;
         continue;
       }
+      gem.singularityParked = false;
       const step = Math.min(distanceToField, (520 + rank * 40) * delta);
       gem.x += dx / distanceToField * step;
       gem.y += dy / distanceToField * step;
@@ -881,7 +886,7 @@ export class Game {
     for (let index = entities.gems.length - 1; index >= 0; index -= 1) {
       const gem = entities.gems[index];
       let currentDistance = distance(gem, player);
-      if (!singularityPulling && currentDistance > 0 && currentDistance < player.magnet) {
+      if (!singularityPulling && !gem.singularityParked && currentDistance > 0 && currentDistance < player.magnet) {
         const step = Math.min(currentDistance, ((player.magnet - currentDistance) * 5 + 100) * delta);
         gem.x += (player.x - gem.x) / currentDistance * step;
         gem.y += (player.y - gem.y) / currentDistance * step;
@@ -1039,7 +1044,7 @@ export class Game {
     if (power.key === 'singularity') {
       player.maxHp = Math.max(60, player.maxHp - 3 * hangarRank);
       player.hp = Math.min(player.hp, player.maxHp);
-      state.singularityTimer = 1.2;
+      state.singularityTimer = 1;
       this.burst(player.x, player.y, '#bb8bff', 32, 1.1);
       this.label(player.x, player.y - 38, 'SINGULARIDADE ATIVADA', '#d3aeff');
     }

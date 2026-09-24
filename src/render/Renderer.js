@@ -536,6 +536,16 @@ export class Renderer {
       context.fillStyle = state.chargeTimer <= 0 ? '#ffd581' : '#9eabbb';
       context.fillText(`TIRO CARREGADO ${state.chargeTimer <= 0 ? 'PRONTO' : `${state.chargeTimer.toFixed(1)}s`}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1;
     }
+    if (state.powers.singularity) {
+      const field = state.singularityField;
+      const status = field?.phase === 'charging'
+        ? `PONTO ${field.timer.toFixed(1)}s`
+        : field?.phase === 'pulling'
+          ? `ATIVA · ${state.singularityTimer.toFixed(1)}s`
+          : state.singularityTimer <= 0 ? 'PRONTA' : `${state.singularityTimer.toFixed(1)}s`;
+      context.fillStyle = field ? '#d5b4ff' : state.singularityTimer <= 0 ? '#d5b4ff' : '#9eabbb';
+      context.fillText(`SINGULARIDADE ${status}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1;
+    }
     if (state.powers.teleport) { context.fillStyle = state.teleportCooldown <= 0 ? '#d5b4ff' : '#9eabbb'; context.fillText(`SALTO Q ${state.teleportCooldown <= 0 ? 'PRONTO' : `${state.teleportCooldown.toFixed(1)}s`}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1; }
     if (state.powers.activeShield) { context.fillStyle = state.activeShieldCooldown <= 0 ? '#9fd7ff' : '#9eabbb'; context.fillText(`BARREIRA E ${state.activeShieldTime > 0 ? `${state.activeShieldTime.toFixed(1)}s` : state.activeShieldCooldown <= 0 ? 'PRONTA' : `${state.activeShieldCooldown.toFixed(1)}s`}`, width - padding, rightStatusY + 39 + cooldownRow * 19); cooldownRow += 1; }
     context.fillStyle = '#ffe783';
