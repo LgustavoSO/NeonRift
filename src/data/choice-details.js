@@ -1,5 +1,5 @@
 import { POWERS } from './upgrades.js';
-import { MAX_COMPANION_LEVEL, MAX_POWER_TARGETS } from './hangar.js';
+import { collectorReturnDelay, MAX_COMPANION_LEVEL, MAX_POWER_TARGETS } from './hangar.js';
 import { shieldStats } from './power-stats.js';
 
 const format = (value, digits = 1) => Number(value.toFixed(digits)).toLocaleString('pt-BR', { maximumFractionDigits: digits });
@@ -38,7 +38,10 @@ export function getChoiceNextEffect(choice, state) {
     const interception = companion && currentLevel < companion.interceptLevel && nextLevel >= companion.interceptLevel && companion.interceptLevel < 99
       ? ' Desbloqueia a interceptação de projéteis.'
       : '';
-    return `+${points(nextDamage - currentDamage)} do dano da nave por tiro, +${format((1 / (.86 ** increase) - 1) * 100)}% de cadência e +${format((1.05 ** increase - 1) * 100)}% de bônus de dano para este aliado.${interception}`;
+    const collection = companion?.collects
+      ? ` Retorna para entregar ${format(collectorReturnDelay(currentLevel))}s → ${format(collectorReturnDelay(nextLevel))}s após o primeiro fragmento.`
+      : '';
+    return `+${points(nextDamage - currentDamage)} do dano da nave por tiro, +${format((1 / (.86 ** increase) - 1) * 100)}% de cadência e +${format((1.05 ** increase - 1) * 100)}% de bônus de dano para este aliado.${interception}${collection}`;
   }
   if (choice.modelId) return `Recruta no nível ${Math.min(MAX_COMPANION_LEVEL, choice.companionGainLevels ?? 1)} de ${MAX_COMPANION_LEVEL}. ${choice.description}`;
 
@@ -78,7 +81,7 @@ export function getChoiceNextEffect(choice, state) {
     case 'shield': { const stats = shieldStats(next); return `Proteção por ${format(stats.duration)}s; recarga de ${format(stats.cooldown)}s após terminar. Cadência −${format((1 - 1 / (1 + .05 * (state.powerBonuses?.shield ?? 0))) * 100)}% pelo Hangar.`; }
     case 'charged': return `Tiro carregado: ${format((3 + next) * 3)}× dano base (crítico incluso); recarga ${format(Math.max(2.8, 7 - next * .7))}s. Clique para disparar.`;
     case 'nova': return `Pulso: raio ${155 + 25 * next} px e ${2 + next}× dano a cada ${format(Math.max(4.5, 10 - next))}s; custa ${Math.min(Math.max(0, player.maxHp - 60), 5 * (state.powerBonuses?.nova ?? 0))} de vida máxima pelo Hangar.`;
-    case 'aimbot': return `+${Math.min(MAX_POWER_TARGETS, next) - Math.min(MAX_POWER_TARGETS, level)} tiro(s) reto(s) de apoio (até ${MAX_POWER_TARGETS}); cadência −${format((1 - 1 / (1 + .04 * (state.powerBonuses?.aimbot ?? 0))) * 100)}% pelo nível do Hangar.`;
+    case 'aimbot': return `Mantém o primeiro dos ${player.shots} tiros na mira normal e guia até ${Math.min(MAX_POWER_TARGETS, next, Math.max(0, player.shots - 1))} dos restantes ao alvo mais próximo, sem tiros extras nem perda de dano; cadência −${format((1 - 1 / (1 + .04 * (state.powerBonuses?.aimbot ?? 0))) * 100)}% pelo nível do Hangar.`;
     case 'overdrive': return `+${format((1.12 ** increase - 1) * 100)}% de dano e +${format((player.rate / Math.min(player.rate, Math.max(.07, player.rate * .86 ** increase)) - 1) * 100)}% de cadência; velocidade −${format((1 - Math.max(120, player.move * .97 ** (state.powerBonuses?.overdrive ?? 0)) / player.move) * 100)}% pelo Hangar.`;
     case 'singularity': return `Atrai e desacelera: raio ${230 + 24 * next} px, ${format(.7 + .2 * next)}× dano a cada ${format(Math.max(4.2, 8 - next * .7))}s; custa ${Math.min(Math.max(0, player.maxHp - 60), 3 * (state.powerBonuses?.singularity ?? 0))} de vida máxima.`;
     case 'ionStorm': return `Atinge até ${Math.min(MAX_POWER_TARGETS, next + 2)} alvos com ${format(1.15 + .28 * next)}× dano a cada ${format(Math.max(2.4, 5 - next * .45))}s; blindagem −${points(.02 * (state.powerBonuses?.ionStorm ?? 0))} pelo Hangar.`;

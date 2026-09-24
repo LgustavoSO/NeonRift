@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createGameState } from '../src/core/state.js';
 import { buyShipUpgrade, buySuperpowerUpgrade, createDefaultProfile, normalizeProfile, rewardLevel } from '../src/core/profile.js';
-import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_PERMANENT_UPGRADE_LEVEL, MAX_RUN_LEVEL, SHIP_UPGRADES, TOTAL_BOSSES } from '../src/data/hangar.js';
+import { BOSS_SCHEDULE, COMPANION_MODELS, collectorReturnDelay, MAX_COMPANION_LEVEL, MAX_PERMANENT_UPGRADE_LEVEL, MAX_RUN_LEVEL, SHIP_UPGRADES, TOTAL_BOSSES } from '../src/data/hangar.js';
 import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, unlockedEnemyTypes, unlockedMiniBossVariants } from '../src/data/enemy-progression.js';
 import { PERMANENT_POWER_UPGRADES, POWERS, UPGRADES, pickChoices } from '../src/data/upgrades.js';
 import { getChoiceNextEffect, getChoiceProgress } from '../src/data/choice-details.js';
@@ -359,7 +359,7 @@ test('run-local companion roles have unique behavior data', () => {
   assert.equal(collector.collects, true);
 });
 
-test('collector delivers banked XP and does not give the ability to other companions', () => {
+test('collector starts returning shortly after the first fragment and resumes collecting after delivery', () => {
   const game = createHarness();
   game.addCompanion(COMPANION_MODELS.find(model => model.id === 'collector'));
   game.addCompanion(COMPANION_MODELS.find(model => model.id === 'striker'));
@@ -372,10 +372,26 @@ test('collector delivers banked XP and does not give the ability to other compan
   game.updateCompanions(.016);
   assert.equal(game.state.xp, 7);
   assert.equal(collector.carriedXp, 0);
+  assert.equal(collector.collectionPhase, 'collect');
+  assert.equal(collector.collectionTimer, 0);
   assert.equal(striker.collects, false);
+  game.state.entities.gems.push({ x: game.state.player.x + 185, y: game.state.player.y, radius: 5, value: 3 });
+  collector.x = game.state.player.x + 180;
+  collector.y = game.state.player.y;
+  game.updateCompanions(.02);
+  assert.equal(collector.collectionPhase, 'collect');
+  assert.equal(collector.carriedXp, 3);
+  assert.equal(collector.collectionTimer, collectorReturnDelay(1));
+  assert.ok(collectorReturnDelay(5) < collectorReturnDelay(1));
+  const improveCollector = { targetId: collector.id, companionGainLevels: 1 };
+  assert.match(getChoiceNextEffect(improveCollector, game.state), /1,8s → 1,5s/);
+  for (let frame = 0; frame < 60 && collector.carriedXp; frame += 1) game.updateCompanions(.04);
+  assert.equal(game.state.xp, 10);
+  assert.equal(collector.collectionPhase, 'collect');
+  assert.equal(collector.collectionTimer, 0);
 });
 
-test('aimbot support fires straight bullets without changing the mouse-aimed primary shot', () => {
+test('aimbot keeps the first shot manual and only redirects existing follow-up shots', () => {
   const game = createHarness();
   const target = { x: 512, y: 200, radius: 12, hp: 100, slow: 0 };
   game.state.entities.enemies.push(target);
@@ -383,11 +399,28 @@ test('aimbot support fires straight bullets without changing the mouse-aimed pri
   game.state.aimTarget = target;
   game.input.pointer = { active: true, x: 900, y: 384 };
   game.shoot();
-  const [primary, assist] = game.state.entities.bullets;
-  assert.ok(primary.vx > 0);
-  assert.ok(Math.abs(primary.vy) < 1e-6);
-  assert.equal(assist.autoAim, true);
-  assert.equal(assist.homingTime, undefined);
+  const [manualShot] = game.state.entities.bullets;
+  assert.equal(game.state.entities.bullets.length, 1);
+  assert.ok(manualShot.vx > 0);
+  assert.equal(manualShot.autoAim, false);
+
+  const preview = getChoiceNextEffect(POWERS.find(power => power.key === 'aimbot'), game.state);
+  assert.match(preview, /primeiro dos 1 tiros na mira normal/);
+  assert.match(preview, /guia até 0 dos restantes/);
+
+  game.state.entities.bullets = [];
+  game.state.player.shots = 4;
+  game.shoot();
+  const shots = game.state.entities.bullets;
+  assert.equal(shots.length, 4);
+  assert.equal(shots[0].autoAim, false);
+  assert.ok(shots[0].vx > 0);
+  assert.equal(shots[1].autoAim, true);
+  assert.ok(shots[1].vy < 0);
+  assert.equal(shots[1].damage, game.state.player.damage);
+  assert.equal(shots[1].homingTime, undefined);
+  assert.equal(shots.filter(bullet => bullet.autoAim).length, 1);
+  assert.equal(shots.filter(bullet => !bullet.autoAim).length, 3);
 });
 
 test('teleport grants brief invulnerability and manual barrier prevents damage', () => {

@@ -5,7 +5,7 @@ import { createGameState, randomSpawnPosition, resizeState } from '../core/state
 import { loadBestScore, saveBestScore } from '../core/storage.js';
 import { AudioManager } from '../core/audio.js';
 import { loadProfile, saveProfile, rewardLevel, buyShipUpgrade, buySuperpowerUpgrade } from '../core/profile.js';
-import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_POWER_TARGETS, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL } from '../data/hangar.js';
+import { BOSS_SCHEDULE, COMPANION_MODELS, MAX_COMPANION_LEVEL, MAX_POWER_TARGETS, MAX_RUN_COMPANIONS, MAX_RUN_LEVEL, collectorReturnDelay } from '../data/hangar.js';
 import { ENEMY_PROGRESSION, MINI_BOSS_VARIANTS, unlockedEnemyTypes, unlockedMiniBossVariants } from '../data/enemy-progression.js';
 import { RUN_RULES } from '../data/game-rules.js';
 import { advanceShield, shieldStats } from '../data/power-stats.js';
@@ -95,7 +95,7 @@ export class Game {
     const state = this.state;
     const player = state.player;
     const phase = state.time * 1.25 + state.companions.length * TAU / Math.max(1, state.companions.length + 1);
-    state.companions.push({ id: state.companionSequence++, modelId: model.id ?? 'scout', role: model.role, name: model.name ?? 'Vaga-lume', icon: model.icon ?? '🛸', color: model.color ?? '#a6fff1', level, damageMultiplier: model.damageMultiplier ?? 1, cadenceMultiplier: model.cadenceMultiplier ?? 1, flightSpeed: model.flightSpeed ?? 1, interceptLevel: model.interceptLevel ?? 3, slowBonus: model.slowBonus ?? 0, shotPierce: model.shotPierce ?? 0, reflects: Boolean(model.reflects), collects: Boolean(model.collects), x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false, collectionPhase: 'collect', collectionTimer: level * 5, carriedXp: 0, shieldCooldown: 0 });
+    state.companions.push({ id: state.companionSequence++, modelId: model.id ?? 'scout', role: model.role, name: model.name ?? 'Vaga-lume', icon: model.icon ?? '🛸', color: model.color ?? '#a6fff1', level, damageMultiplier: model.damageMultiplier ?? 1, cadenceMultiplier: model.cadenceMultiplier ?? 1, flightSpeed: model.flightSpeed ?? 1, interceptLevel: model.interceptLevel ?? 3, slowBonus: model.slowBonus ?? 0, shotPierce: model.shotPierce ?? 0, reflects: Boolean(model.reflects), collects: Boolean(model.collects), x: player.x + Math.cos(phase) * 52, y: player.y + Math.sin(phase) * 52, phase, angle: 0, shootTimer: .4, disabledTimer: 0, hitFlash: 0, intercepting: false, collectionPhase: 'collect', collectionTimer: 0, carriedXp: 0, shieldCooldown: 0 });
   }
 
   loop(time) {
@@ -294,18 +294,21 @@ export class Game {
       let targetX = intercept?.x ?? homeX;
       let targetY = intercept?.y ?? homeY;
       if (companion.collects) {
-        companion.collectionTimer -= delta;
-        if (companion.collectionTimer <= 0) {
-          companion.collectionPhase = companion.collectionPhase === 'collect' ? 'deliver' : 'collect';
-          companion.collectionTimer = companion.level * 5;
-          if (companion.collectionPhase === 'collect') companion.deliveryDone = false;
+        if (companion.collectionPhase === 'collect' && companion.carriedXp > 0) {
+          companion.collectionTimer -= delta;
+          if (companion.collectionTimer <= 0) {
+            companion.collectionPhase = 'deliver';
+            companion.deliveryDone = false;
+          }
         }
         if (companion.collectionPhase === 'collect') {
           const gem = entities.gems.reduce((nearest, item) => !nearest || distance(companion, item) < distance(companion, nearest) ? item : nearest, null);
           if (gem) {
             targetX = gem.x; targetY = gem.y;
             if (distance(companion, gem) < 18) {
+              const isFirstFragment = companion.carriedXp === 0;
               companion.carriedXp += gem.value;
+              if (isFirstFragment) companion.collectionTimer = collectorReturnDelay(companion.level);
               entities.gems.splice(entities.gems.indexOf(gem), 1);
               this.burst(gem.x, gem.y, companion.color, 6, .4);
             }
@@ -318,6 +321,8 @@ export class Game {
             this.label(player.x, player.y - 38, state.level < MAX_RUN_LEVEL ? `PEREGRINO ENTREGOU +${companion.carriedXp} XP` : `PEREGRINO ENTREGOU +${companion.carriedXp * 2} PTS`, '#8dffe2');
             companion.carriedXp = 0;
             companion.deliveryDone = true;
+            companion.collectionPhase = 'collect';
+            companion.collectionTimer = 0;
           }
         }
       }
@@ -477,16 +482,19 @@ export class Game {
     player.angle = center;
     const fire = (angle, isAutoAim = false) => {
       const speed = player.projectileSpeed;
-      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, life: 1.1, radius: 4, damage: player.damage * (isAutoAim ? .62 : 1), pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow, overdrive: state.powers.overdrive > 0, autoAim: isAutoAim });
+      entities.bullets.push({ x: player.x + Math.cos(angle) * 18, y: player.y + Math.sin(angle) * 18, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed, life: 1.1, radius: 4, damage: player.damage, pierce: player.pierce, hit: new Set(), critical: Math.random() < player.crit, slow: player.slow, overdrive: state.powers.overdrive > 0, autoAim: isAutoAim });
     };
-    for (let index = 0; index < player.shots; index += 1) {
-      fire(center + (index - (player.shots - 1) / 2) * .16);
-    }
     const autoTarget = state.powers.aimbot ? state.aimTarget : null;
-    const autoShots = Math.min(MAX_POWER_TARGETS, state.powers.aimbot);
-    if (autoTarget && entities.enemies.includes(autoTarget)) {
-      const targetAngle = angleTo(player, autoTarget);
-      for (let index = 0; index < autoShots; index += 1) fire(targetAngle + (index - (autoShots - 1) / 2) * .08, true);
+    const autoShots = autoTarget && entities.enemies.includes(autoTarget)
+      ? Math.min(Math.max(0, player.shots - 1), MAX_POWER_TARGETS, state.powers.aimbot)
+      : 0;
+    const targetAngle = autoShots ? angleTo(player, autoTarget) : center;
+    for (let index = 0; index < player.shots; index += 1) {
+      if (index > 0 && index <= autoShots) {
+        fire(targetAngle + (index - (autoShots + 1) / 2) * .08, true);
+      } else {
+        fire(center + (index - (player.shots - 1) / 2) * .16);
+      }
     }
     this.audio.play(450, .055, 'triangle', .016);
     this.burst(player.x + Math.cos(center) * 17, player.y + Math.sin(center) * 17, state.powers.overdrive ? '#ffbd58' : '#70f5ff', state.powers.overdrive ? 6 : 3, state.powers.overdrive ? .7 : .35);

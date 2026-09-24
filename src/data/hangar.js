@@ -3,6 +3,7 @@ export const MAX_RUN_COMPANIONS = 4;
 export const MAX_PERMANENT_UPGRADE_LEVEL = 10;
 export const MAX_POWER_TARGETS = 10;
 export const MAX_COMPANION_LEVEL = 5;
+export const collectorReturnDelay = level => Math.max(.75, 2 - level * .25);
 export const BOSS_SCHEDULE = Object.freeze({ 4: 1, 8: 1, 12: 1, 16: 1, 20: 1, 24: 1, 28: 1, 32: 1 });
 export const TOTAL_BOSSES = Object.values(BOSS_SCHEDULE).reduce((total, count) => total + count, 0);
 
@@ -20,7 +21,7 @@ export const COMPANION_MODELS = [
   { id: 'striker', name: 'Lança', role: 'Atacante', icon: '✦', damageMultiplier: 1.28, cadenceMultiplier: .92, flightSpeed: .95, interceptLevel: 3, shotPierce: 1, color: '#ffc96b', description: 'Projéteis de alto dano atravessam inimigos.' },
   { id: 'bulwark', name: 'Égide', role: 'Escudo', icon: '◉', damageMultiplier: .45, cadenceMultiplier: 1.25, flightSpeed: 1.5, interceptLevel: 1, shieldCharges: 1, color: '#91b8ff', description: 'Intercepta projéteis e pode bloquear inimigos próximos.' },
   { id: 'reflector', name: 'Prisma', role: 'Refletor', icon: '◇', damageMultiplier: .68, cadenceMultiplier: 1.16, flightSpeed: 1.3, interceptLevel: 1, reflects: true, color: '#ef9cff', description: 'Devolve projéteis inimigos contra quem os disparou.' },
-  { id: 'collector', name: 'Peregrino', role: 'Coletor de XP', icon: '✧', damageMultiplier: .55, cadenceMultiplier: 1.4, flightSpeed: 1.55, interceptLevel: 99, collects: true, color: '#86ffd1', description: 'Busca fragmentos de experiência e os entrega à nave.' },
+  { id: 'collector', name: 'Peregrino', role: 'Coletor de XP', icon: '✧', damageMultiplier: .55, cadenceMultiplier: 1.4, flightSpeed: 1.55, interceptLevel: 99, collects: true, color: '#86ffd1', description: 'Recolhe fragmentos e retorna à nave pouco depois para entregar a experiência.' },
 ];
 
 export const SKILL_UNLOCKS = [

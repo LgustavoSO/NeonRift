@@ -3,6 +3,7 @@
 ## Correções e balanceamento
 
 - Ondas duram pelo menos 24s e avançam ao limpar o campo abaixo da meta; o limite é 36s. O intervalo de reagrupamento foi aumentado para 4s.
+- Mira automática mantém o primeiro disparo manual e redireciona tiros seguintes da rajada existente, sem gerar projéteis extras nem reduzir o dano. Após pegar o primeiro fragmento, o Peregrino espera no máximo 1,75s no nível 1 (menos a cada nível) e retorna para entregar; inicia nova coleta logo após a entrega.
 - Escolhas só funcionam no estado correto, uma vez por tela; botões antigos não podem repetir uma recompensa, recrutar outro aliado ou reabrir uma partida encerrada.
 - Dano fatal interrompe o restante do frame. Cura e XP não são coletados depois da derrota; a tela final é emitida apenas uma vez.
 - Escudos automático e manual recarregam **após** a proteção terminar, eliminando invulnerabilidade contínua em ranks altos.
